@@ -17,6 +17,7 @@ import {
 	DropdownMenuSeparator,
 } from "@maple/ui/components/ui/dropdown-menu"
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker"
+import { ReloadControls } from "@/components/time-range-picker/reload-controls"
 import { useDashboardTimeRange } from "@/components/dashboard-builder/dashboard-providers"
 import { useDashboardActions } from "@/components/dashboard-builder/dashboard-actions-context"
 import { downloadPortableDashboard } from "@/components/dashboard-builder/portable-dashboard"
@@ -66,6 +67,8 @@ export function DashboardToolbar({
 					}
 				}}
 			/>
+
+			<ReloadControls />
 
 			<div className="flex items-center gap-1">
 				{isEdit && (
