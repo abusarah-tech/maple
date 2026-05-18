@@ -273,6 +273,7 @@ export {
 	toStartOfInterval,
 	intervalSub,
 	formatDateTime,
+	toDateTime,
 	if_,
 	multiIf,
 	coalesce,

@@ -579,7 +579,7 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 			.handle("listMetrics", ({ payload }) =>
 				Effect.gen(function* () {
 					const tenant = yield* CurrentTenant.Context
-					const compiled = CH.compileUnion(
+					const compiled = CH.compile(
 						CH.listMetricsQuery({
 							serviceName: payload.service,
 							metricType: payload.metricType,
@@ -602,10 +602,11 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 			.handle("metricsSummary", ({ payload }) =>
 				Effect.gen(function* () {
 					const tenant = yield* CurrentTenant.Context
-					const compiled = CH.compileUnion(
-						CH.metricsSummaryQuery({ serviceName: payload.service }),
-						{ orgId: tenant.orgId, startTime: payload.startTime, endTime: payload.endTime },
-					)
+					const compiled = CH.compile(CH.metricsSummaryQuery({ serviceName: payload.service }), {
+						orgId: tenant.orgId,
+						startTime: payload.startTime,
+						endTime: payload.endTime,
+					})
 					const rows = yield* mapExecError(
 						warehouse.sqlQuery(tenant, compiled.sql, {
 							profile: "discovery",

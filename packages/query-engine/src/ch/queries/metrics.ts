@@ -9,10 +9,9 @@ import type { MetricType } from "../../query-engine"
 import * as CH from "../expr"
 import * as T from "../types"
 import { param } from "../param"
-import { from, type CHQuery } from "../query"
+import { from } from "../query"
 import { table } from "../table"
-import { unionAll, type CHUnionQuery } from "../union"
-import { MetricsSum, MetricsGauge, MetricsHistogram, MetricsExpHistogram } from "../tables"
+import { MetricsSum, MetricCatalog } from "../tables"
 import { compileCH } from "../compile"
 import { resolveMetricTable, metricsSelectExprs } from "./query-helpers"
 
@@ -211,7 +210,7 @@ export function metricsBreakdownQuery(opts: MetricsBreakdownOpts) {
 }
 
 // ---------------------------------------------------------------------------
-// List metrics (UNION ALL — 4 metric tables)
+// List metrics — reads the hourly `metric_catalog` rollup
 // ---------------------------------------------------------------------------
 
 export interface ListMetricsOpts {
@@ -234,46 +233,30 @@ export interface ListMetricsOutput {
 	readonly isMonotonic: boolean | number
 }
 
-export function listMetricsQuery(opts: ListMetricsOpts): CHUnionQuery<ListMetricsOutput> {
-	function buildSubquery(
-		tbl: typeof MetricsSum | typeof MetricsGauge | typeof MetricsHistogram | typeof MetricsExpHistogram,
-		metricType: string,
-		hasIsMonotonic: boolean,
-	) {
-		return from(tbl as typeof MetricsSum)
-			.select(($) => ({
-				metricName: $.MetricName,
-				metricType: CH.lit(metricType),
-				serviceName: $.ServiceName,
-				metricDescription: CH.any_($.MetricDescription),
-				metricUnit: CH.any_($.MetricUnit),
-				dataPointCount: CH.count(),
-				firstSeen: CH.min_($.TimeUnix),
-				lastSeen: CH.max_($.TimeUnix),
-				isMonotonic: hasIsMonotonic ? CH.any_(CH.dynamicColumn<number>("IsMonotonic")) : CH.lit(0),
-			}))
-			.where(($) => [
-				$.OrgId.eq(param.string("orgId")),
-				$.TimeUnix.gte(param.dateTime("startTime")),
-				$.TimeUnix.lte(param.dateTime("endTime")),
-				CH.when(opts.serviceName, (v: string) => $.ServiceName.eq(v)),
-				CH.when(opts.search, (v: string) => $.MetricName.ilike(`%${v}%`)),
-			])
-			.groupBy("metricName", "serviceName")
-	}
-
-	const queries: Array<CHQuery<any, ListMetricsOutput>> = []
-	const showSum = !opts.metricType || opts.metricType === "sum"
-	const showGauge = !opts.metricType || opts.metricType === "gauge"
-	const showHist = !opts.metricType || opts.metricType === "histogram"
-	const showExpHist = !opts.metricType || opts.metricType === "exponential_histogram"
-
-	if (showSum) queries.push(buildSubquery(MetricsSum, "sum", true))
-	if (showGauge) queries.push(buildSubquery(MetricsGauge, "gauge", false))
-	if (showHist) queries.push(buildSubquery(MetricsHistogram, "histogram", false))
-	if (showExpHist) queries.push(buildSubquery(MetricsExpHistogram, "exponential_histogram", false))
-
-	return unionAll(...queries)
+export function listMetricsQuery(opts: ListMetricsOpts) {
+	return from(MetricCatalog)
+		.select(($) => ({
+			metricName: $.MetricName,
+			metricType: $.MetricType,
+			serviceName: $.ServiceName,
+			metricDescription: CH.any_($.MetricDescription),
+			metricUnit: CH.any_($.MetricUnit),
+			dataPointCount: CH.sum($.DataPointCount),
+			firstSeen: CH.min_($.FirstSeen),
+			lastSeen: CH.max_($.LastSeen),
+			isMonotonic: CH.any_($.IsMonotonic),
+		}))
+		.where(($) => [
+			$.OrgId.eq(param.string("orgId")),
+			// Floor the start bound to the hour so the oldest catalog bucket
+			// (Hour is already hour-truncated) isn't dropped for mid-hour ranges.
+			$.Hour.gte(CH.toStartOfInterval(CH.toDateTime(param.dateTime("startTime")), 3600)),
+			$.Hour.lte(param.dateTime("endTime")),
+			CH.when(opts.serviceName, (v: string) => $.ServiceName.eq(v)),
+			CH.when(opts.metricType, (v: string) => $.MetricType.eq(v)),
+			CH.when(opts.search, (v: string) => $.MetricName.ilike(`%${v}%`)),
+		])
+		.groupBy("metricName", "metricType", "serviceName")
 		.orderBy(["lastSeen", "desc"])
 		.limit(opts.limit ?? 100)
 		.offset(opts.offset ?? 0)
@@ -281,7 +264,7 @@ export function listMetricsQuery(opts: ListMetricsOpts): CHUnionQuery<ListMetric
 }
 
 // ---------------------------------------------------------------------------
-// Metrics summary (UNION ALL — 4 metric tables)
+// Metrics summary — reads the hourly `metric_catalog` rollup
 // ---------------------------------------------------------------------------
 
 export interface MetricsSummaryOutput {
@@ -294,29 +277,19 @@ export interface MetricsSummaryOpts {
 	serviceName?: string
 }
 
-export function metricsSummaryQuery(opts?: MetricsSummaryOpts): CHUnionQuery<MetricsSummaryOutput> {
-	function buildSubquery(
-		tbl: typeof MetricsSum | typeof MetricsGauge | typeof MetricsHistogram | typeof MetricsExpHistogram,
-		metricType: string,
-	) {
-		return from(tbl as typeof MetricsSum)
-			.select(($) => ({
-				metricType: CH.lit(metricType),
-				metricCount: CH.uniq($.MetricName),
-				dataPointCount: CH.count(),
-			}))
-			.where(($) => [
-				$.OrgId.eq(param.string("orgId")),
-				$.TimeUnix.gte(param.dateTime("startTime")),
-				$.TimeUnix.lte(param.dateTime("endTime")),
-				CH.when(opts?.serviceName, (v: string) => $.ServiceName.eq(v)),
-			])
-	}
-
-	return unionAll(
-		buildSubquery(MetricsSum, "sum"),
-		buildSubquery(MetricsGauge, "gauge"),
-		buildSubquery(MetricsHistogram, "histogram"),
-		buildSubquery(MetricsExpHistogram, "exponential_histogram"),
-	).format("JSON")
+export function metricsSummaryQuery(opts?: MetricsSummaryOpts) {
+	return from(MetricCatalog)
+		.select(($) => ({
+			metricType: $.MetricType,
+			metricCount: CH.uniq($.MetricName),
+			dataPointCount: CH.sum($.DataPointCount),
+		}))
+		.where(($) => [
+			$.OrgId.eq(param.string("orgId")),
+			$.Hour.gte(CH.toStartOfInterval(CH.toDateTime(param.dateTime("startTime")), 3600)),
+			$.Hour.lte(param.dateTime("endTime")),
+			CH.when(opts?.serviceName, (v: string) => $.ServiceName.eq(v)),
+		])
+		.groupBy("metricType")
+		.format("JSON")
 }

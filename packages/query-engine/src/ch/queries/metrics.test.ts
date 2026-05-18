@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest"
 import { compileCH } from "../compile"
-import { compileUnion } from "../compile"
 import {
 	metricsTimeseriesQuery,
 	metricsTimeseriesRateQuery,
@@ -173,44 +172,39 @@ describe("metricsBreakdownQuery", () => {
 // ---------------------------------------------------------------------------
 
 describe("listMetricsQuery", () => {
-	it("compiles UNION ALL of 4 metric tables", () => {
+	it("reads the metric_catalog rollup", () => {
 		const q = listMetricsQuery({})
-		const { sql } = compileUnion(q, baseParams)
-		const unionCount = (sql.match(/UNION ALL/g) || []).length
-		expect(unionCount).toBe(3) // 4 queries = 3 UNION ALL
-		expect(sql).toContain("FROM metrics_sum")
-		expect(sql).toContain("FROM metrics_gauge")
-		expect(sql).toContain("FROM metrics_histogram")
-		expect(sql).toContain("FROM metrics_exponential_histogram")
-		expect(sql).toContain("'sum' AS metricType")
-		expect(sql).toContain("'gauge' AS metricType")
+		const { sql } = compileCH(q, baseParams)
+		expect(sql).not.toContain("UNION ALL")
+		expect(sql).toContain("FROM metric_catalog")
+		expect(sql).toContain("GROUP BY metricName, metricType, serviceName")
 		expect(sql).toContain("ORDER BY lastSeen DESC")
 		expect(sql).toContain("LIMIT 100")
+		// start bound floored to the hour
+		expect(sql).toContain("toStartOfInterval")
 	})
 
 	it("filters by metricType", () => {
 		const q = listMetricsQuery({ metricType: "sum" })
-		const { sql } = compileUnion(q, baseParams)
-		expect(sql).toContain("FROM metrics_sum")
-		expect(sql).not.toContain("UNION ALL")
-		expect(sql).not.toContain("FROM metrics_gauge")
+		const { sql } = compileCH(q, baseParams)
+		expect(sql).toContain("MetricType = 'sum'")
 	})
 
 	it("applies search filter", () => {
 		const q = listMetricsQuery({ search: "http" })
-		const { sql } = compileUnion(q, baseParams)
+		const { sql } = compileCH(q, baseParams)
 		expect(sql).toContain("ILIKE '%http%'")
 	})
 
 	it("applies serviceName filter", () => {
 		const q = listMetricsQuery({ serviceName: "api" })
-		const { sql } = compileUnion(q, baseParams)
+		const { sql } = compileCH(q, baseParams)
 		expect(sql).toContain("ServiceName = 'api'")
 	})
 
 	it("applies custom limit and offset", () => {
 		const q = listMetricsQuery({ limit: 50, offset: 10 })
-		const { sql } = compileUnion(q, baseParams)
+		const { sql } = compileCH(q, baseParams)
 		expect(sql).toContain("LIMIT 50")
 		expect(sql).toContain("OFFSET 10")
 	})
@@ -221,22 +215,19 @@ describe("listMetricsQuery", () => {
 // ---------------------------------------------------------------------------
 
 describe("metricsSummaryQuery", () => {
-	it("compiles summary with 4 metric type subqueries", () => {
+	it("aggregates the metric_catalog rollup by metric type", () => {
 		const q = metricsSummaryQuery()
-		const { sql } = compileUnion(q, baseParams)
-		const unionCount = (sql.match(/UNION ALL/g) || []).length
-		expect(unionCount).toBe(3)
-		expect(sql).toContain("'sum' AS metricType")
-		expect(sql).toContain("'gauge' AS metricType")
-		expect(sql).toContain("'histogram' AS metricType")
-		expect(sql).toContain("'exponential_histogram' AS metricType")
+		const { sql } = compileCH(q, baseParams)
+		expect(sql).not.toContain("UNION ALL")
+		expect(sql).toContain("FROM metric_catalog")
+		expect(sql).toContain("GROUP BY metricType")
 		expect(sql).toContain("uniq(MetricName)")
-		expect(sql).toContain("count()")
+		expect(sql).toContain("sum(DataPointCount)")
 	})
 
 	it("applies serviceName filter", () => {
 		const q = metricsSummaryQuery({ serviceName: "api" })
-		const { sql } = compileUnion(q, baseParams)
+		const { sql } = compileCH(q, baseParams)
 		expect(sql).toContain("ServiceName = 'api'")
 	})
 })

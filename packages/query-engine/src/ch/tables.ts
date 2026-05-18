@@ -186,6 +186,20 @@ export const MetricsHistogram = table("metrics_histogram", {
 	AggregationTemporality: T.int32,
 })
 
+export const MetricCatalog = table("metric_catalog", {
+	OrgId: T.string,
+	Hour: T.dateTime,
+	MetricType: T.string,
+	ServiceName: T.string,
+	MetricName: T.string,
+	MetricDescription: T.string,
+	MetricUnit: T.string,
+	IsMonotonic: T.uint8,
+	DataPointCount: T.uint64,
+	FirstSeen: T.dateTime,
+	LastSeen: T.dateTime,
+})
+
 export const AttributeKeysHourly = table("attribute_keys_hourly", {
 	OrgId: T.string,
 	Hour: T.dateTime,

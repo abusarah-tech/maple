@@ -38,6 +38,8 @@ interface MetricsTableProps {
 	metricType: ListMetricsInput["metricType"] | null
 	selectedMetric: Metric | null
 	onSelectMetric: (metric: Metric | null) => void
+	startTime?: string
+	endTime?: string
 }
 
 function LoadingState() {
@@ -79,13 +81,22 @@ function LoadingState() {
 	)
 }
 
-export function MetricsTable({ search, metricType, selectedMetric, onSelectMetric }: MetricsTableProps) {
+export function MetricsTable({
+	search,
+	metricType,
+	selectedMetric,
+	onSelectMetric,
+	startTime,
+	endTime,
+}: MetricsTableProps) {
 	const metricsResult = useAtomValue(
 		listMetricsResultAtom({
 			data: {
 				search: search || undefined,
 				metricType: metricType || undefined,
 				limit: 100,
+				startTime,
+				endTime,
 			},
 		}),
 	)

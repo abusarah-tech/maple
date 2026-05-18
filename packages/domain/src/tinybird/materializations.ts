@@ -14,6 +14,7 @@ import {
 	attributeValuesHourly,
 	tracesAggregatesHourly,
 	logsAggregatesHourly,
+	metricCatalog,
 } from "./datasources"
 
 /**
@@ -672,6 +673,116 @@ export const metricAttributeKeysMv = defineMaterializedView("metric_attribute_ke
         FROM metrics_sum
         WHERE Attributes != map()
         GROUP BY OrgId, Hour, AttributeKey, AttributeScope
+      `,
+		}),
+	],
+})
+
+// ---------------------------------------------------------------------------
+// Metric catalog — one MV per raw metric table, all feeding `metric_catalog`.
+// Each hourly-rolls up distinct metrics so the Metrics page discovery queries
+// read the tiny catalog instead of scanning raw datapoints.
+// ---------------------------------------------------------------------------
+
+export const metricCatalogSumMv = defineMaterializedView("metric_catalog_sum_mv", {
+	description: "Hourly rollup of distinct sum metrics into metric_catalog.",
+	datasource: metricCatalog,
+	nodes: [
+		node({
+			name: "metric_catalog_sum_mv_node",
+			sql: `
+        SELECT
+          OrgId,
+          toStartOfHour(toDateTime(TimeUnix)) AS Hour,
+          'sum' AS MetricType,
+          ServiceName,
+          MetricName,
+          anyLast(MetricDescription) AS MetricDescription,
+          anyLast(MetricUnit) AS MetricUnit,
+          anyLast(toUInt8(IsMonotonic)) AS IsMonotonic,
+          count() AS DataPointCount,
+          min(toDateTime(TimeUnix)) AS FirstSeen,
+          max(toDateTime(TimeUnix)) AS LastSeen
+        FROM metrics_sum
+        GROUP BY OrgId, Hour, MetricType, ServiceName, MetricName
+      `,
+		}),
+	],
+})
+
+export const metricCatalogGaugeMv = defineMaterializedView("metric_catalog_gauge_mv", {
+	description: "Hourly rollup of distinct gauge metrics into metric_catalog.",
+	datasource: metricCatalog,
+	nodes: [
+		node({
+			name: "metric_catalog_gauge_mv_node",
+			sql: `
+        SELECT
+          OrgId,
+          toStartOfHour(toDateTime(TimeUnix)) AS Hour,
+          'gauge' AS MetricType,
+          ServiceName,
+          MetricName,
+          anyLast(MetricDescription) AS MetricDescription,
+          anyLast(MetricUnit) AS MetricUnit,
+          toUInt8(0) AS IsMonotonic,
+          count() AS DataPointCount,
+          min(toDateTime(TimeUnix)) AS FirstSeen,
+          max(toDateTime(TimeUnix)) AS LastSeen
+        FROM metrics_gauge
+        GROUP BY OrgId, Hour, MetricType, ServiceName, MetricName
+      `,
+		}),
+	],
+})
+
+export const metricCatalogHistogramMv = defineMaterializedView("metric_catalog_histogram_mv", {
+	description: "Hourly rollup of distinct histogram metrics into metric_catalog.",
+	datasource: metricCatalog,
+	nodes: [
+		node({
+			name: "metric_catalog_histogram_mv_node",
+			sql: `
+        SELECT
+          OrgId,
+          toStartOfHour(toDateTime(TimeUnix)) AS Hour,
+          'histogram' AS MetricType,
+          ServiceName,
+          MetricName,
+          anyLast(MetricDescription) AS MetricDescription,
+          anyLast(MetricUnit) AS MetricUnit,
+          toUInt8(0) AS IsMonotonic,
+          count() AS DataPointCount,
+          min(toDateTime(TimeUnix)) AS FirstSeen,
+          max(toDateTime(TimeUnix)) AS LastSeen
+        FROM metrics_histogram
+        GROUP BY OrgId, Hour, MetricType, ServiceName, MetricName
+      `,
+		}),
+	],
+})
+
+export const metricCatalogExpHistogramMv = defineMaterializedView("metric_catalog_exp_histogram_mv", {
+	description: "Hourly rollup of distinct exponential histogram metrics into metric_catalog.",
+	datasource: metricCatalog,
+	nodes: [
+		node({
+			name: "metric_catalog_exp_histogram_mv_node",
+			sql: `
+        SELECT
+          OrgId,
+          toStartOfHour(toDateTime(TimeUnix)) AS Hour,
+          'exponential_histogram' AS MetricType,
+          ServiceName,
+          MetricName,
+          anyLast(MetricDescription) AS MetricDescription,
+          anyLast(MetricUnit) AS MetricUnit,
+          toUInt8(0) AS IsMonotonic,
+          count() AS DataPointCount,
+          min(toDateTime(TimeUnix)) AS FirstSeen,
+          max(toDateTime(TimeUnix)) AS LastSeen
+        FROM metrics_exponential_histogram
+        GROUP BY OrgId, Hour, MetricType, ServiceName, MetricName
       `,
 		}),
 	],

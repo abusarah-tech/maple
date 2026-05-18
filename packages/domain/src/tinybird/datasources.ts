@@ -977,6 +977,40 @@ export const metricsExponentialHistogram = defineDatasource("metrics_exponential
 export type MetricsExponentialHistogramRow = InferRow<typeof metricsExponentialHistogram>
 
 /**
+ * Hourly catalog of distinct metrics — one row per
+ * (OrgId, Hour, MetricType, ServiceName, MetricName) — with datapoint counts
+ * and first/last-seen timestamps. AggregatingMergeTree MV target, fed by one
+ * MV per raw metric table. Powers the Metrics page discovery queries
+ * (`listMetricsQuery` / `metricsSummaryQuery`) so they read a tiny rollup
+ * instead of scanning raw datapoints.
+ */
+export const metricCatalog = defineDatasource("metric_catalog", {
+	description:
+		"Hourly catalog of distinct metrics (name/type/service) with datapoint counts and first/last-seen. AggregatingMergeTree MV target; powers the Metrics page discovery queries.",
+	jsonPaths: false,
+	schema: {
+		OrgId: t.string().lowCardinality(),
+		Hour: t.dateTime(),
+		MetricType: t.string().lowCardinality(),
+		ServiceName: t.string().lowCardinality(),
+		MetricName: t.string().lowCardinality(),
+		MetricDescription: t.simpleAggregateFunction("anyLast", t.string()),
+		MetricUnit: t.simpleAggregateFunction("anyLast", t.string()),
+		IsMonotonic: t.simpleAggregateFunction("anyLast", t.uint8()),
+		DataPointCount: t.simpleAggregateFunction("sum", t.uint64()),
+		FirstSeen: t.simpleAggregateFunction("min", t.dateTime()),
+		LastSeen: t.simpleAggregateFunction("max", t.dateTime()),
+	},
+	engine: engine.aggregatingMergeTree({
+		partitionKey: "toDate(Hour)",
+		sortingKey: ["OrgId", "MetricType", "ServiceName", "MetricName", "Hour"],
+		ttl: "Hour + INTERVAL 90 DAY",
+	}),
+})
+
+export type MetricCatalogRow = InferRow<typeof metricCatalog>
+
+/**
  * Pre-aggregated attribute keys with hourly usage counts.
  * Fed by MVs from traces (span + resource), logs, and metrics tables.
  */

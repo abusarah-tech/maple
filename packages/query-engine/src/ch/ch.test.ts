@@ -996,13 +996,12 @@ describe("converted queries", () => {
 		expect(sql).toContain("'commit_sha' AS facetType")
 	})
 
-	it("metricsSummaryQuery compiles 4 UNION ALL", () => {
+	it("metricsSummaryQuery aggregates the metric_catalog rollup", () => {
 		const q = metricsSummaryQuery()
-		const { sql } = compileUnion(q, baseParams)
-		const unionCount = (sql.match(/UNION ALL/g) || []).length
-		expect(unionCount).toBe(3) // 4 queries = 3 UNION ALL
-		expect(sql).toContain("'sum' AS metricType")
-		expect(sql).toContain("'gauge' AS metricType")
+		const { sql } = compileCH(q, baseParams)
+		expect(sql).not.toContain("UNION ALL")
+		expect(sql).toContain("FROM metric_catalog")
+		expect(sql).toContain("GROUP BY metricType")
 		expect(sql).toContain("uniq(MetricName)")
 	})
 

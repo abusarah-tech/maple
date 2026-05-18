@@ -44,10 +44,17 @@ const cardConfig = [
 interface MetricsSummaryCardsProps {
 	selectedType: MetricType | null
 	onSelectType: (type: MetricType | null) => void
+	startTime?: string
+	endTime?: string
 }
 
-export function MetricsSummaryCards({ selectedType, onSelectType }: MetricsSummaryCardsProps) {
-	const summaryResult = useAtomValue(getMetricsSummaryResultAtom({ data: {} }))
+export function MetricsSummaryCards({
+	selectedType,
+	onSelectType,
+	startTime,
+	endTime,
+}: MetricsSummaryCardsProps) {
+	const summaryResult = useAtomValue(getMetricsSummaryResultAtom({ data: { startTime, endTime } }))
 
 	return Result.builder(summaryResult)
 		.onInitial(() => (
