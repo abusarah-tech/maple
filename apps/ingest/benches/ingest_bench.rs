@@ -65,6 +65,7 @@ fn bench_ingest_accept(c: &mut Criterion) {
                         "org_bench",
                         black_box(&fixture.traces),
                         &SamplingPolicy::default(),
+                        &[],
                     )
                     .await
                     .expect("accept traces"),
