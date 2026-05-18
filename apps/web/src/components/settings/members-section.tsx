@@ -414,7 +414,7 @@ export function MembersSection() {
 								Role
 							</Label>
 							<Select value={inviteRole} onValueChange={(val) => val && setInviteRole(val)}>
-								<SelectTrigger id="invite-role">
+								<SelectTrigger id="invite-role" className="w-full">
 									<SelectValue placeholder="Select role">
 										{inviteRole === "org:admin" ? "Admin" : "Member"}
 									</SelectValue>

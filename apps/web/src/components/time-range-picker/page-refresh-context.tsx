@@ -2,8 +2,6 @@ import * as React from "react"
 
 import { relativeToAbsolute } from "@/lib/time-utils"
 
-export const LIVE_REFRESH_INTERVAL_MS = 10_000
-
 export interface RelativeRefreshRange {
 	startTime: string
 	endTime: string
@@ -12,9 +10,7 @@ export interface RelativeRefreshRange {
 
 interface PageRefreshContextValue {
 	refreshVersion: number
-	liveEnabled: boolean
 	isReloading: boolean
-	setLiveEnabled: React.Dispatch<React.SetStateAction<boolean>>
 	reload: () => void
 }
 
@@ -38,21 +34,13 @@ export function resolveRelativeRefreshRange(timePreset?: string): RelativeRefres
 	}
 }
 
-export function isDocumentVisible(doc: Document = document): boolean {
-	return doc.visibilityState === "visible"
-}
-
 export function PageRefreshProvider({
 	children,
 	timePreset,
 	onRelativeRangeRefresh,
 }: PageRefreshProviderProps) {
 	const [refreshVersion, setRefreshVersion] = React.useState(0)
-	const [liveEnabled, setLiveEnabled] = React.useState(false)
 	const [isReloading, setIsReloading] = React.useState(false)
-	const [isVisible, setIsVisible] = React.useState(() =>
-		typeof document === "undefined" ? true : isDocumentVisible(document),
-	)
 	const reloadTimeoutRef = React.useRef<ReturnType<typeof setTimeout>>(null)
 
 	const triggerReload = React.useEffectEvent(() => {
@@ -73,41 +61,13 @@ export function PageRefreshProvider({
 		}
 	}, [])
 
-	React.useEffect(() => {
-		if (typeof document === "undefined") return
-
-		const handleVisibilityChange = () => {
-			const visible = isDocumentVisible(document)
-			setIsVisible(visible)
-
-			if (visible && liveEnabled) {
-				triggerReload()
-			}
-		}
-
-		document.addEventListener("visibilitychange", handleVisibilityChange)
-		return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
-	}, [liveEnabled])
-
-	React.useEffect(() => {
-		if (!liveEnabled || !isVisible) return
-
-		const intervalId = window.setInterval(() => {
-			triggerReload()
-		}, LIVE_REFRESH_INTERVAL_MS)
-
-		return () => window.clearInterval(intervalId)
-	}, [isVisible, liveEnabled])
-
 	const value = React.useMemo<PageRefreshContextValue>(
 		() => ({
 			refreshVersion,
-			liveEnabled,
 			isReloading,
-			setLiveEnabled,
 			reload: () => triggerReload(),
 		}),
-		[liveEnabled, isReloading, refreshVersion],
+		[isReloading, refreshVersion],
 	)
 
 	return <PageRefreshContext value={value}>{children}</PageRefreshContext>

@@ -934,7 +934,7 @@ function ServiceMapCanvas({
 								>
 									<SelectTrigger
 										size="sm"
-										className="h-6 text-[11px] capitalize border-0 bg-transparent px-1.5"
+										className="h-6 min-w-0 text-[11px] capitalize border-0 bg-transparent px-1.5"
 									>
 										<SelectValue />
 									</SelectTrigger>

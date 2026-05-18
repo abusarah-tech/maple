@@ -15,14 +15,12 @@ import { ShorthandInput } from "./shorthand-input"
 import { RecentlyUsed } from "./recently-used"
 import { TimezoneDisplay } from "./timezone-display"
 import { CustomRangePicker } from "./custom-range-picker"
-import { LiveIndicatorDot, LivePopoverFooter } from "./reload-controls"
 
 export function TimeRangePicker({
 	startTime,
 	endTime,
 	presetValue,
 	onChange,
-	showLiveControls = false,
 }: TimeRangePickerProps) {
 	const [open, setOpen] = useState(false)
 	const [tab, setTab] = useState<TimeRangeTab>("relative")
@@ -110,7 +108,6 @@ export function TimeRangePicker({
 					<Button variant="outline" size="sm" className="gap-2">
 						<ClockIcon className="size-3.5" />
 						<span>{displayText}</span>
-						{showLiveControls && <LiveIndicatorDot />}
 					</Button>
 				}
 			/>
@@ -157,7 +154,6 @@ export function TimeRangePicker({
 								<TimezoneDisplay />
 							</div>
 						</div>
-						{showLiveControls && <LivePopoverFooter />}
 					</div>
 				)}
 			</PopoverContent>

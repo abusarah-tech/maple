@@ -318,7 +318,7 @@ function AlertCreatePage() {
 											}))
 										}
 									>
-										<SelectTrigger>
+										<SelectTrigger className="w-full">
 											<SelectValue />
 										</SelectTrigger>
 										<SelectContent>
@@ -342,7 +342,7 @@ function AlertCreatePage() {
 											}))
 										}
 									>
-										<SelectTrigger>
+										<SelectTrigger className="w-full">
 											<SelectValue />
 										</SelectTrigger>
 										<SelectContent>
@@ -407,7 +407,7 @@ function AlertCreatePage() {
 											if (value) setRuleForm((c) => ({ ...c, queryAggregation: value }))
 										}}
 									>
-										<SelectTrigger>
+										<SelectTrigger className="w-full">
 											<SelectValue />
 										</SelectTrigger>
 										<SelectContent>
@@ -444,7 +444,7 @@ function AlertCreatePage() {
 													}))
 												}
 											>
-												<SelectTrigger>
+												<SelectTrigger className="w-full">
 													<SelectValue />
 												</SelectTrigger>
 												<SelectContent>
@@ -510,7 +510,7 @@ function AlertCreatePage() {
 												}))
 										}}
 									>
-										<SelectTrigger>
+										<SelectTrigger className="w-full">
 											<SelectValue />
 										</SelectTrigger>
 										<SelectContent>

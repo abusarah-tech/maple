@@ -8,12 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { useRefreshableAtomValue } from "@/hooks/use-refreshable-atom-value"
 
-import {
-	LIVE_REFRESH_INTERVAL_MS,
-	PageRefreshProvider,
-	resolveRelativeRefreshRange,
-	usePageRefreshContext,
-} from "./page-refresh-context"
+import { PageRefreshProvider, resolveRelativeRefreshRange, usePageRefreshContext } from "./page-refresh-context"
 
 function createWrapper() {
 	const registry = Registry.make()
@@ -33,14 +28,11 @@ function makeCounterAtom(counter: { current: number }) {
 }
 
 function Controls() {
-	const { liveEnabled, reload, setLiveEnabled } = usePageRefreshContext()
+	const { reload } = usePageRefreshContext()
 
 	return (
 		<div>
 			<button onClick={reload}>reload</button>
-			<button onClick={() => setLiveEnabled((current) => !current)}>
-				{liveEnabled ? "live-on" : "live-off"}
-			</button>
 		</div>
 	)
 }
@@ -78,15 +70,6 @@ function Harness({
 	)
 }
 
-function setVisibilityState(state: "visible" | "hidden") {
-	Object.defineProperty(document, "visibilityState", {
-		configurable: true,
-		get: () => state,
-	})
-
-	document.dispatchEvent(new Event("visibilitychange"))
-}
-
 async function flushRefresh() {
 	await act(async () => {
 		await Promise.resolve()
@@ -97,14 +80,12 @@ describe("page refresh controller", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
 		vi.setSystemTime(new Date("2026-03-10T12:00:00.000Z"))
-		setVisibilityState("visible")
 	})
 
 	afterEach(() => {
 		cleanup()
 		vi.useRealTimers()
 		vi.restoreAllMocks()
-		setVisibilityState("visible")
 	})
 
 	it("reloads multiple refresh-aware atoms on manual reload", async () => {
@@ -147,46 +128,5 @@ describe("page refresh controller", () => {
 		expect(screen.getByTestId("a").textContent).toBe("2")
 
 		expect(onRelativeRangeRefresh).not.toHaveBeenCalled()
-	})
-
-	it("polls every 10 seconds in live mode, pauses when hidden, and refreshes on resume", async () => {
-		render(<Harness timePreset="15m" />, { wrapper: createWrapper() })
-
-		await act(async () => {
-			fireEvent.click(screen.getByRole("button", { name: "live-off" }))
-		})
-
-		await act(async () => {
-			vi.advanceTimersByTime(LIVE_REFRESH_INTERVAL_MS)
-		})
-
-		await flushRefresh()
-
-		expect(screen.getByTestId("a").textContent).toBe("2")
-		expect(screen.getByTestId("b").textContent).toBe("2")
-
-		await act(async () => {
-			setVisibilityState("hidden")
-		})
-
-		await flushRefresh()
-
-		await act(async () => {
-			vi.advanceTimersByTime(LIVE_REFRESH_INTERVAL_MS * 2)
-		})
-
-		await flushRefresh()
-
-		expect(screen.getByTestId("a").textContent).toBe("2")
-		expect(screen.getByTestId("b").textContent).toBe("2")
-
-		await act(async () => {
-			setVisibilityState("visible")
-		})
-
-		await flushRefresh()
-
-		expect(screen.getByTestId("a").textContent).toBe("3")
-		expect(screen.getByTestId("b").textContent).toBe("3")
 	})
 })

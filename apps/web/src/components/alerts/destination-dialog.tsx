@@ -305,7 +305,7 @@ function HazelOAuthFields({
 						}))
 					}}
 				>
-					<SelectTrigger id="destination-hazel-organization">
+					<SelectTrigger id="destination-hazel-organization" className="w-full">
 						{selectedOrgName ? (
 							<span className="flex items-center gap-2">
 								<HazelOrgAvatar logoUrl={selectedOrgLogoUrl} name={selectedOrgName} />
@@ -352,7 +352,7 @@ function HazelOAuthFields({
 					}}
 					disabled={orgIdForChannels.length === 0 || channelsLoading}
 				>
-					<SelectTrigger id="destination-hazel-channel">
+					<SelectTrigger id="destination-hazel-channel" className="w-full">
 						<SelectValue
 							placeholder={
 								orgIdForChannels.length === 0

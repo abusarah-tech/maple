@@ -280,7 +280,7 @@ function DashboardContent({ defaultPreset }: { defaultPreset: string }) {
 						value={selectedEnvironment}
 						onValueChange={handleEnvironmentChange}
 					>
-						<SelectTrigger>
+						<SelectTrigger size="sm">
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>

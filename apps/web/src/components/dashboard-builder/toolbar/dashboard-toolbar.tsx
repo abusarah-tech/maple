@@ -49,7 +49,6 @@ export function DashboardToolbar({
 				startTime={resolvedTimeRange?.startTime}
 				endTime={resolvedTimeRange?.endTime}
 				presetValue={timeRange.type === "relative" ? timeRange.value : undefined}
-				showLiveControls
 				onChange={(range) => {
 					if (range.startTime && range.endTime) {
 						if (range.presetValue) {
