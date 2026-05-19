@@ -1,5 +1,19 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M12 3V9",
+	"M3 9H21",
+	"M17 17L15 17",
+	"M5 21H19",
+	"M6 3H18",
+	"M3 19V9",
+	"M21 19V9",
+	"M20 7L20 7.01",
+	"M4.00001 7L4 7.01",
+	"M5.00001 5L5 5.01",
+	"M19 5L19 5.01",
+]
+
 function CubeIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,19 +26,9 @@ function CubeIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<path d="M12 22.5V11" stroke="currentColor" strokeWidth="2" />
-			<path
-				d="M21.5 6.25L22 6L12 11L2 6.00L2.5 6.25"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-			/>
-			<path
-				d="M22 18.07V5.92L12 1.5L2 5.92V18.07L12 22.5L22 18.07Z"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

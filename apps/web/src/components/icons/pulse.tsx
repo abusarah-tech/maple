@@ -1,5 +1,7 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = ["M2 12H8L11 5L15 19L18 12H22"]
+
 function PulseIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,12 +14,9 @@ function PulseIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<path
-				d="M2 12H4L5.5 9L9.5 18L14.5 6L18.5 15L20 12H22"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeLinecap="square"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

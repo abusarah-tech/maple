@@ -38,15 +38,17 @@ interface MetricsTableProps {
 	metricType: ListMetricsInput["metricType"] | null
 	selectedMetric: Metric | null
 	onSelectMetric: (metric: Metric | null) => void
+	startTime?: string
+	endTime?: string
 }
 
 function LoadingState() {
 	return (
 		<div className="rounded-md border overflow-auto">
-			<Table>
+			<Table className="table-fixed">
 				<TableHeader>
 					<TableRow>
-						<TableHead>Metric Name</TableHead>
+						<TableHead className="w-[40%]">Metric Name</TableHead>
 						<TableHead className="hidden md:table-cell w-[100px]">Type</TableHead>
 						<TableHead className="hidden md:table-cell w-[120px]">Service</TableHead>
 						<TableHead className="hidden md:table-cell w-[100px]">Points</TableHead>
@@ -79,13 +81,22 @@ function LoadingState() {
 	)
 }
 
-export function MetricsTable({ search, metricType, selectedMetric, onSelectMetric }: MetricsTableProps) {
+export function MetricsTable({
+	search,
+	metricType,
+	selectedMetric,
+	onSelectMetric,
+	startTime,
+	endTime,
+}: MetricsTableProps) {
 	const metricsResult = useAtomValue(
 		listMetricsResultAtom({
 			data: {
 				search: search || undefined,
 				metricType: metricType || undefined,
 				limit: 100,
+				startTime,
+				endTime,
 			},
 		}),
 	)
@@ -96,10 +107,10 @@ export function MetricsTable({ search, metricType, selectedMetric, onSelectMetri
 		.onSuccess((response, result) => (
 			<div className={`space-y-4 ${result.waiting ? "opacity-60" : ""}`}>
 				<div className="rounded-md border overflow-auto">
-					<Table>
+					<Table className="table-fixed">
 						<TableHeader>
 							<TableRow>
-								<TableHead>Metric Name</TableHead>
+								<TableHead className="w-[40%]">Metric Name</TableHead>
 								<TableHead className="w-[100px]">Type</TableHead>
 								<TableHead className="w-[120px]">Service</TableHead>
 								<TableHead className="w-[100px]">Points</TableHead>
@@ -127,8 +138,8 @@ export function MetricsTable({ search, metricType, selectedMetric, onSelectMetri
 											onClick={() => onSelectMetric(isSelected ? null : metric)}
 										>
 											<TableCell>
-												<div className="flex flex-col gap-0.5">
-													<span className="font-mono text-xs">
+												<div className="flex min-w-0 flex-col gap-0.5">
+													<span className="truncate font-mono text-xs" title={metric.metricName}>
 														{metric.metricName}
 													</span>
 													{metric.metricDescription && (
@@ -142,9 +153,13 @@ export function MetricsTable({ search, metricType, selectedMetric, onSelectMetri
 												<MetricTypeBadge type={metric.metricType} />
 											</TableCell>
 											<TableCell className="hidden md:table-cell">
-												<Badge variant="outline" className="font-mono text-[10px]">
-													{metric.serviceName}
-												</Badge>
+												{metric.serviceName ? (
+													<Badge variant="outline" className="font-mono text-[10px]">
+														{metric.serviceName}
+													</Badge>
+												) : (
+													<span className="text-xs text-muted-foreground">-</span>
+												)}
 											</TableCell>
 											<TableCell className="hidden md:table-cell font-mono text-xs">
 												{formatNumber(metric.dataPointCount)}

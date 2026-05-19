@@ -1,5 +1,7 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = ["M4 4H17L20 7V20H4Z", "M8 4V9H15V4", "M8 13H16V20H8Z"]
+
 function FloppyDiskIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,30 +14,9 @@ function FloppyDiskIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<polyline
-				points="7 17 7 13 17 13 17 17"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<path
-				d="m19,21H5c-1.10,0-2-.895-2-2V5c0-1.10.895-2,2-2h11l5,5v11c0,1.10-.895,2-2,2Z"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<line
-				x1="15"
-				y1="7"
-				x2="15"
-				y2="9"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

@@ -1,5 +1,17 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M18 3L21 3L21 6",
+	"M19 8L19 11",
+	"M16 5L13 5",
+	"M11 7L8 7",
+	"M9 13L5 13",
+	"M6 9L3 9L3 11",
+	"M17 13L17 16",
+	"M11 15L11 19",
+	"M15 18L15 21H13",
+]
+
 function PaperPlaneIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,19 +24,9 @@ function PaperPlaneIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<polyline
-				points="21.5 2.5 7 12.87 7 21 12 16.62"
-				stroke="currentColor"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<polygon
-				points="2.5 9.5 21.5 2.5 18.5 21.5 2.5 9.5"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

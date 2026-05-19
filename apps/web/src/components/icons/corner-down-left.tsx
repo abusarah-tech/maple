@@ -1,20 +1,8 @@
 import type { IconProps } from "./icon"
 
-const paths: ReadonlyArray<string> = [
-	"M12 21V17",
-	"M11 2H13",
-	"M21 19L21 10",
-	"M3 19L3 10",
-	"M5 8.00999V7.99999",
-	"M7 6.00999V5.99999",
-	"M9 4.00999V3.99999",
-	"M15 4.00999V3.99999",
-	"M17 6.00999V5.99999",
-	"M19 8.00999V7.99999",
-	"M5 21H19",
-]
+const paths: ReadonlyArray<string> = ["M18 5V13H8", "M12 9L8 13L12 17"]
 
-function HouseIcon({ size = 24, className, ...props }: IconProps) {
+function CornerDownLeftIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
@@ -32,4 +20,4 @@ function HouseIcon({ size = 24, className, ...props }: IconProps) {
 		</svg>
 	)
 }
-export { HouseIcon }
+export { CornerDownLeftIcon }

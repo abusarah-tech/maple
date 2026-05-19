@@ -427,7 +427,7 @@ export function compilePipeQuery(pipe: string, params: PipeParams): PipeCompiled
 			// ----- Metrics -----
 			Match.when("list_metrics", () =>
 				eraseType(
-					CH.compileUnion(
+					CH.compile(
 						CH.listMetricsQuery({
 							serviceName: str("service"),
 							metricType: str("metric_type"),
@@ -441,7 +441,7 @@ export function compilePipeQuery(pipe: string, params: PipeParams): PipeCompiled
 			),
 			Match.when("metrics_summary", () =>
 				eraseType(
-					CH.compileUnion(CH.metricsSummaryQuery({ serviceName: str("service") }), {
+					CH.compile(CH.metricsSummaryQuery({ serviceName: str("service") }), {
 						orgId,
 						startTime,
 						endTime,

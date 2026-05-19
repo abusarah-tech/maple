@@ -1,5 +1,14 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M9 6L9 6.01",
+	"M9 12L9 12.01",
+	"M9 18L9 18.01",
+	"M15 6L15 6.01",
+	"M15 12L15 12.01",
+	"M15 18L15 18.01",
+]
+
 function GripDotsIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,66 +21,9 @@ function GripDotsIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<circle
-				cx="12"
-				cy="8.25"
-				r=".75"
-				fill="currentColor"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<circle
-				cx="19.75"
-				cy="8.25"
-				r=".75"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-				fill="currentColor"
-			/>
-			<circle
-				cx="4.25"
-				cy="8.25"
-				r=".75"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-				fill="currentColor"
-			/>
-			<circle
-				cx="12"
-				cy="15.75"
-				r=".75"
-				fill="currentColor"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<circle
-				cx="19.75"
-				cy="15.75"
-				r=".75"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-				fill="currentColor"
-			/>
-			<circle
-				cx="4.25"
-				cy="15.75"
-				r=".75"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-				fill="currentColor"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="3" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

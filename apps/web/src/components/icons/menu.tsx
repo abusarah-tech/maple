@@ -1,5 +1,7 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = ["M4 6H20", "M4 12H20", "M4 18H20"]
+
 function MenuIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,36 +14,9 @@ function MenuIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<line
-				x1="2"
-				y1="12"
-				x2="22"
-				y2="12"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<line
-				x1="2"
-				y1="5"
-				x2="22"
-				y2="5"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<line
-				x1="2"
-				y1="19"
-				x2="22"
-				y2="19"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

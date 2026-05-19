@@ -1,5 +1,17 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M9 3L4 8",
+	"M4 8V16",
+	"M4 16L9 21",
+	"M9 21H15",
+	"M15 21L20 16",
+	"M20 16V8",
+	"M20 8L16 4",
+	"M16 4H11",
+	"M15 1L11 4L15 7",
+]
+
 function ArrowPathIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,34 +24,10 @@ function ArrowPathIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<path
-				d="M3 12a9 9 0 0 1 15.36-6.36L21 8"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeLinecap="square"
-			/>
-			<path
-				d="M21 3v5h-5"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeLinecap="square"
-				strokeLinejoin="miter"
-			/>
-			<path
-				d="M21 12a9 9 0 0 1-15.36 6.36L3 16"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeLinecap="square"
-			/>
-			<path
-				d="M3 21v-5h5"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeLinecap="square"
-				strokeLinejoin="miter"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }
-
 export { ArrowPathIcon }

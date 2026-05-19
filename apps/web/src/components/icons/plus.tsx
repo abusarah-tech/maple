@@ -1,5 +1,7 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = ["M3 12H10", "M14 12H21", "M12 14V21", "M12 3V10"]
+
 function PlusIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,26 +14,9 @@ function PlusIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<line
-				x1="21"
-				y1="12"
-				x2="3"
-				y2="12"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<line
-				x1="12"
-				y1="3"
-				x2="12"
-				y2="21"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

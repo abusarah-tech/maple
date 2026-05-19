@@ -1,5 +1,28 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M13 5H13.01",
+	"M15 7H15.01",
+	"M17 9H17.01",
+	"M19 11H19.01",
+	"M17 13H17.01",
+	"M17 20H17.01",
+	"M4 7H4.01",
+	"M15 15H15.01",
+	"M9 9H9.01",
+	"M11 15H11.01",
+	"M9 13H9.01",
+	"M11 7H11.01",
+	"M15 3H21V9",
+	"M19 15V18",
+	"M9 5L6 5",
+	"M13 17V22H15",
+	"M7 11L2 11L2 9",
+	"M5 16H6",
+	"M8 19L8 18",
+	"M3 18V21H6",
+]
+
 function RocketIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,42 +35,9 @@ function RocketIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<path
-				d="m10.00,7h-3.03c-.608,0-1.18.277-1.56.752l-3.60,4.51,4.55,1.08"
-				stroke="currentColor"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<path
-				d="m17,13.99v3.03c0,.608-.277,1.18-.752,1.56l-4.51,3.60-1.08-4.55"
-				stroke="currentColor"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<circle
-				cx="15.5"
-				cy="8.5"
-				r=".5"
-				fill="currentColor"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<path
-				d="m4.40,16.95c-.31.15-.62.37-.918.67-1.16,1.16-1.48,4.38-1.48,4.38,0,0,3.22-.324,4.38-1.48.297-.297.51-.608.67-.918"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<path
-				d="m10.64,17.64c5.76-1.58,10.56-6.50,11.35-15.64-9.14.786-14.06,5.58-15.64,11.35l4.29,4.29Z"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

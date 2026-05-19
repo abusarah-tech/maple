@@ -1,5 +1,19 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M14 14L10 14",
+	"M6 10H6.01",
+	"M6 14H6.01",
+	"M10 10H10.01",
+	"M14 10H14.01",
+	"M18 10H18.01",
+	"M18 14H18.01",
+	"M4 6H20",
+	"M4 18H20",
+	"M2 8V16",
+	"M22 8V16",
+]
+
 function KeyboardIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,62 +26,9 @@ function KeyboardIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<path
-				d="M4 18L20 18C21.10 18 22 17.10 22 16L22 8.00C22 6.89 21.10 6.00 20 6.00L4 6.00C2.89 6.00 2 6.89 2 8.00L2 16C2 17.10 2.89 18 4 18Z"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-				strokeLinecap="square"
-			/>
-			<path
-				d="M6 10H6.01"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-				strokeLinecap="square"
-			/>
-			<path
-				d="M10 10H10.01"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-				strokeLinecap="square"
-			/>
-			<path
-				d="M10 14H14"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-				strokeLinecap="square"
-			/>
-			<path
-				d="M6 14H6.01"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-				strokeLinecap="square"
-			/>
-			<path
-				d="M18 14H18.01"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-				strokeLinecap="square"
-			/>
-			<path
-				d="M14 10H14.01"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-				strokeLinecap="square"
-			/>
-			<path
-				d="M18 10H18.01"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-				strokeLinecap="square"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

@@ -1,5 +1,17 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M7.01001 12H7.00001",
+	"M9.01001 10H9.00001",
+	"M9.01001 14H9.00001",
+	"M11.01 16H11",
+	"M11.01 8H11",
+	"M13.01 6H13",
+	"M13.01 18H13",
+	"M15.01 20H15",
+	"M15.01 4H15",
+]
+
 function ChevronLeftIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,13 +24,9 @@ function ChevronLeftIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<path
-				d="M16 21L7 12L16 3"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-				strokeLinecap="square"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

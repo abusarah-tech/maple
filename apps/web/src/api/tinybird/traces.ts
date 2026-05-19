@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 import { QueryEngineExecuteRequest, type AttributeFilter } from "@maple/query-engine"
 import { TraceId, SpanId } from "@maple/domain"
-import { SpanHierarchyRequest } from "@maple/domain/http"
+import { SpanHierarchyRequest, SpanDetailRequest } from "@maple/domain/http"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import {
 	TinybirdDateTimeString,
@@ -474,6 +474,62 @@ const getSpanHierarchyEffect = Effect.fn("QueryEngine.getSpanHierarchy")(functio
 		rootSpans,
 		totalDurationMs,
 	}
+})
+
+// ---------------------------------------------------------------------------
+// Span detail — full attribute maps for a single span, loaded on demand.
+// The hierarchy query intentionally returns only trimmed maps (the keys the
+// tree views render); the detail panel fetches the full maps lazily for the
+// one selected span.
+// ---------------------------------------------------------------------------
+
+const GetSpanDetailInputSchema = Schema.Struct({
+	traceId: TraceId,
+	spanId: SpanId,
+	/** Any timestamp inside the trace — narrows the partition scan to ±1h. */
+	timestamp: Schema.optional(Schema.String),
+})
+
+export type GetSpanDetailInput = Schema.Schema.Type<typeof GetSpanDetailInputSchema>
+
+export interface SpanDetailResult {
+	spanAttributes: Record<string, string>
+	resourceAttributes: Record<string, string>
+}
+
+export function getSpanDetail({ data }: { data: GetSpanDetailInput }) {
+	return getSpanDetailEffect({ data })
+}
+
+const getSpanDetailEffect = Effect.fn("QueryEngine.getSpanDetail")(function* ({
+	data,
+}: {
+	data: GetSpanDetailInput
+}) {
+	const input = yield* decodeInput(GetSpanDetailInputSchema, data, "getSpanDetail")
+
+	yield* Effect.annotateCurrentSpan("traceId", input.traceId)
+	yield* Effect.annotateCurrentSpan("spanId", input.spanId)
+
+	const range = computeSpanHierarchyRange(input.timestamp)
+
+	const result = yield* runTinybirdQuery("spanDetail", () =>
+		Effect.gen(function* () {
+			const client = yield* MapleApiAtomClient
+			return yield* client.queryEngine.spanDetail({
+				payload: new SpanDetailRequest({
+					traceId: input.traceId,
+					spanId: input.spanId,
+					...(range && { startTime: range.startTime, endTime: range.endTime }),
+				}),
+			})
+		}),
+	)
+
+	return {
+		spanAttributes: parseAttributes(result.data?.spanAttributes),
+		resourceAttributes: parseAttributes(result.data?.resourceAttributes),
+	} satisfies SpanDetailResult
 })
 
 export interface FacetItem {

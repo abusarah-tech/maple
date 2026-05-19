@@ -11,7 +11,7 @@ import { cjk } from "@streamdown/cjk"
 import { code } from "@streamdown/code"
 import { math } from "@streamdown/math"
 import { mermaid } from "@streamdown/mermaid"
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
+import { ChevronLeftIcon, ChevronRightIcon } from "@/components/icons"
 import { createContext, memo, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { Streamdown, type PluginConfig } from "streamdown"
 

@@ -1,5 +1,26 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M5 15H5.01",
+	"M7 13H7.01",
+	"M9 11H9.01",
+	"M11 9H11.01",
+	"M13 7H13.01",
+	"M15 5H15.01",
+	"M17 3H17.01",
+	"M19 5H19.01",
+	"M9 19H9.01",
+	"M11 17H11.01",
+	"M13 21H21",
+	"M13 15H13.01",
+	"M15 13H15.01",
+	"M17 11H17.01",
+	"M19 9H19.01",
+	"M21 7H21.01",
+	"M3 17V21H7",
+	"M15 9H15.01",
+]
+
 function PencilIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,32 +33,9 @@ function PencilIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<line
-				x1="14"
-				y1="5"
-				x2="19"
-				y2="10"
-				stroke="currentColor"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<path
-				d="m9,20l-6,1,1-6L15.46,3.53c1.38-1.38,3.61-1.38,5,0h0c1.38,1.38,1.38,3.61,0,5l-11.46,11.46Z"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<line
-				x1="16.5"
-				y1="7.5"
-				x2="8"
-				y2="16"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

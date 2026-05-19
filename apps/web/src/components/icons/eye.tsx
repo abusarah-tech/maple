@@ -1,5 +1,24 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M13 16L11 16",
+	"M15 14L15 12",
+	"M9 14L9 12",
+	"M20.01 10L20 10",
+	"M13 10L11 10",
+	"M4.01001 10L4.00001 10",
+	"M22.01 8L22 8",
+	"M18.01 8L18 8",
+	"M6.01001 8L6.00001 8",
+	"M2.01001 8L2.00001 8",
+	"M16 6L8 6",
+	"M18.01 4L18 4",
+	"M6.01001 4L6.00001 4",
+	"M12.01 3L12 3",
+	"M22 12V14",
+	"M2 12V14",
+]
+
 function EyeIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,22 +31,9 @@ function EyeIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<circle
-				cx="12"
-				cy="10"
-				r="5"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<path
-				d="m1.14,12s3.85-7,10.85-7,10.85,7,10.85,7c0,0-3.85,7-10.85,7S1.14,12,1.14,12Z"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

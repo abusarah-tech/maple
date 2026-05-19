@@ -58,6 +58,7 @@ import {
 	getResourceAttributeValues,
 	getSpanAttributeKeys,
 	getSpanAttributeValues,
+	getSpanDetail,
 	getSpanHierarchy,
 	getTracesFacets,
 	listTraces,
@@ -147,6 +148,10 @@ export const getTracesFacetsResultAtom = makeQueryAtomFamily(getTracesFacets, {
 })
 
 export const getSpanHierarchyResultAtom = makeQueryAtomFamily(getSpanHierarchy)
+
+export const getSpanDetailResultAtom = makeQueryAtomFamily(getSpanDetail, {
+	staleTime: 60_000,
+})
 
 export const listLogsResultAtom = makeQueryAtomFamily(listLogs, {
 	staleTime: 30_000,

@@ -1,6 +1,6 @@
 import type { IconProps } from "./icon"
 
-function MinusIcon({ size = 24, className, ...props }: IconProps) {
+function SquareIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
@@ -12,8 +12,8 @@ function MinusIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<path d="M3 12L21 12" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			<path d="M4 4H20V20H4Z" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
 		</svg>
 	)
 }
-export { MinusIcon }
+export { SquareIcon }

@@ -1,5 +1,7 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = ["M7 8L17 16L12 20L12 4L17 8L7 16"]
+
 function BluetoothIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,13 +14,9 @@ function BluetoothIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<polyline
-				points="5 17 18 6 11 2 11 22 18 17 5 6"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

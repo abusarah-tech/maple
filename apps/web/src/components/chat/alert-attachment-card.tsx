@@ -1,6 +1,7 @@
 import { useNavigate } from "@tanstack/react-router"
 import { cn } from "@maple/ui/utils"
 import { Button } from "@maple/ui/components/ui/button"
+import { XmarkIcon } from "@/components/icons"
 import { signalLabel, type AlertContext } from "./alert-context"
 
 interface AlertAttachmentCardProps {
@@ -142,14 +143,7 @@ export function AlertAttachmentCard({ alert, className }: AlertAttachmentCardPro
 						aria-label="Detach alert"
 						title="Detach alert"
 					>
-						<svg viewBox="0 0 16 16" fill="none" className="size-3">
-							<path
-								d="M3.5 3.5L12.5 12.5M12.5 3.5L3.5 12.5"
-								stroke="currentColor"
-								strokeWidth="1.5"
-								strokeLinecap="round"
-							/>
-						</svg>
+						<XmarkIcon className="size-3" />
 					</Button>
 				</div>
 			</div>

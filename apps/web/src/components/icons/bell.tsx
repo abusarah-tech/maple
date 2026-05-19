@@ -1,5 +1,19 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M9 20H9.01",
+	"M15 20H15.01",
+	"M16 4H16.01",
+	"M8 4H8.01",
+	"M11 22H13",
+	"M10 2H14",
+	"M21 16L21 14",
+	"M3 16L3 14",
+	"M18 5.99999L18 12L19 12",
+	"M6 6L6 12L5 12",
+	"M5 18H19",
+]
+
 function BellIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,21 +26,9 @@ function BellIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<path
-				d="m22,18c-1.65,0-3-1.34-3-3v-6c0-3.86-3.13-7-7-7h0c-3.86,0-7,3.13-7,7v6c0,1.65-1.34,3-3,3h20Z"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<path
-				d="m10.27,22c.346.59.984,1,1.72,1s1.37-.405,1.72-1h-3.44Z"
-				fill="currentColor"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

@@ -28,21 +28,23 @@ use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use hmac::{Hmac, Mac};
+use maple_ingest::metrics;
 use maple_ingest::otel::{build_resource, forward_client_span, ResourceConfig};
 use maple_ingest::telemetry::{
     AttributeMappingRule, MappingOperation, MappingSourceContext, PipelineError, SamplingPolicy,
     TelemetryPipeline, TinybirdConfig,
 };
-use metrics::{counter, gauge, histogram};
 use moka::future::Cache;
 use opentelemetry::trace::TracerProvider as _;
-use opentelemetry_otlp::{Protocol, SpanExporter, WithExportConfig};
+use opentelemetry_otlp::{MetricExporter, Protocol, SpanExporter, WithExportConfig};
 use opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceRequest;
 use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequest;
 use opentelemetry_proto::tonic::collector::trace::v1::ExportTraceServiceRequest;
 use opentelemetry_proto::tonic::common::v1::{any_value, AnyValue, InstrumentationScope, KeyValue};
 use opentelemetry_proto::tonic::logs::v1::{LogRecord, ResourceLogs, ScopeLogs};
 use opentelemetry_proto::tonic::resource::v1::Resource;
+use opentelemetry_sdk::metrics::periodic_reader_with_async_runtime::PeriodicReader;
+use opentelemetry_sdk::metrics::SdkMeterProvider;
 use opentelemetry_sdk::runtime::Tokio as OtelTokio;
 use opentelemetry_sdk::trace::span_processor_with_async_runtime::BatchSpanProcessor;
 use opentelemetry_sdk::trace::{BatchConfigBuilder, SdkTracerProvider};
@@ -523,7 +525,6 @@ struct AppState {
     sampling_resolver: SamplingPolicyResolver,
     attribute_mapping_resolver: AttributeMappingResolver,
     cloudflare_resolver: CloudflareConnectorResolver,
-    metrics_handle: metrics_exporter_prometheus::PrometheusHandle,
     autumn_tracker: Option<AutumnTracker>,
 }
 
@@ -621,7 +622,7 @@ struct InFlightGuard;
 
 impl Drop for InFlightGuard {
     fn drop(&mut self) {
-        gauge!("ingest_requests_in_flight").decrement(1.0);
+        metrics::request_finished();
     }
 }
 
@@ -654,23 +655,14 @@ impl OrgInFlightLimiter {
         loop {
             let current = counter.load(Ordering::Relaxed);
             if current >= self.max_per_org {
-                counter!(
-                    "ingest_org_throttled_total",
-                    "org_id" => org_id.to_string(),
-                    "reason" => "in_flight"
-                )
-                .increment(1);
+                metrics::org_throttled(org_id, "in_flight");
                 return None;
             }
             if counter
                 .compare_exchange(current, current + 1, Ordering::AcqRel, Ordering::Relaxed)
                 .is_ok()
             {
-                gauge!(
-                    "ingest_org_requests_in_flight",
-                    "org_id" => org_id.to_string()
-                )
-                .set((current + 1) as f64);
+                metrics::org_requests_in_flight(org_id, current + 1);
                 return Some(OrgInFlightPermit {
                     org_id: org_id.to_string(),
                     counter,
@@ -684,11 +676,7 @@ impl Drop for OrgInFlightPermit {
     fn drop(&mut self) {
         let current = self.counter.fetch_sub(1, Ordering::AcqRel);
         let next = current.saturating_sub(1);
-        gauge!(
-            "ingest_org_requests_in_flight",
-            "org_id" => self.org_id.clone()
-        )
-        .set(next as f64);
+        metrics::org_requests_in_flight(&self.org_id, next);
     }
 }
 
@@ -748,7 +736,22 @@ impl IntoResponse for ApiError {
     }
 }
 
-fn init_tracing(forward_endpoint: &str, bind_port: u16) -> Option<SdkTracerProvider> {
+/// Resolve the deployment environment in maple's canonical priority order.
+/// MAPLE_ENVIRONMENT is what apps/api/alchemy.run.ts and friends set via
+/// resolveDeploymentEnvironment(stage); RAILWAY_ENVIRONMENT_NAME is Railway's
+/// free runtime label; DEPLOYMENT_ENV is a manual override of last resort.
+fn resolve_deployment_env() -> String {
+    std::env::var("MAPLE_ENVIRONMENT")
+        .or_else(|_| std::env::var("RAILWAY_ENVIRONMENT_NAME"))
+        .or_else(|_| std::env::var("DEPLOYMENT_ENV"))
+        .unwrap_or_else(|_| "development".to_string())
+}
+
+fn init_tracing(
+    forward_endpoint: &str,
+    bind_port: u16,
+    service_instance_id: &str,
+) -> Option<SdkTracerProvider> {
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| "maple_ingest=info,tower_http=info".into());
 
@@ -756,14 +759,7 @@ fn init_tracing(forward_endpoint: &str, bind_port: u16) -> Option<SdkTracerProvi
         .with_target(false)
         .compact();
 
-    // Resolve the deployment environment in maple's canonical priority order.
-    // MAPLE_ENVIRONMENT is what apps/api/alchemy.run.ts and friends set via
-    // resolveDeploymentEnvironment(stage); RAILWAY_ENVIRONMENT_NAME is Railway's
-    // free runtime label; DEPLOYMENT_ENV is a manual override of last resort.
-    let deployment_env = std::env::var("MAPLE_ENVIRONMENT")
-        .or_else(|_| std::env::var("RAILWAY_ENVIRONMENT_NAME"))
-        .or_else(|_| std::env::var("DEPLOYMENT_ENV"))
-        .unwrap_or_else(|_| "development".to_string());
+    let deployment_env = resolve_deployment_env();
     let internal_org_id =
         std::env::var("MAPLE_INTERNAL_ORG_ID").unwrap_or_else(|_| "internal".to_string());
 
@@ -787,7 +783,7 @@ fn init_tracing(forward_endpoint: &str, bind_port: u16) -> Option<SdkTracerProvi
     let resource = build_resource(ResourceConfig {
         service_name: "ingest",
         service_version: env!("CARGO_PKG_VERSION"),
-        service_instance_id: uuid::Uuid::new_v4().to_string(),
+        service_instance_id: service_instance_id.to_string(),
         deployment_env,
         internal_org_id,
     });
@@ -840,6 +836,61 @@ fn init_tracing(forward_endpoint: &str, bind_port: u16) -> Option<SdkTracerProvi
     Some(provider)
 }
 
+/// Wire up OTLP metric export, mirroring `init_tracing`. The gateway's own
+/// operational metrics are pushed to `{forward_endpoint}/v1/metrics` on a
+/// periodic interval — the same downstream collector → Tinybird pipeline that
+/// carries its traces. Returns `None` (metrics become no-ops) when export is
+/// skipped in local dev or would loop back onto this server.
+fn init_metrics(
+    forward_endpoint: &str,
+    bind_port: u16,
+    service_instance_id: &str,
+) -> Option<SdkMeterProvider> {
+    let deployment_env = resolve_deployment_env();
+    let internal_org_id =
+        std::env::var("MAPLE_INTERNAL_ORG_ID").unwrap_or_else(|_| "internal".to_string());
+
+    let forward_explicit = std::env::var("INGEST_FORWARD_OTLP_ENDPOINT").is_ok();
+    let skip_dev = deployment_env == "development" && !forward_explicit;
+    if skip_dev || endpoint_loopback_to_self(forward_endpoint, bind_port) {
+        return None;
+    }
+
+    let resource = build_resource(ResourceConfig {
+        service_name: "ingest",
+        service_version: env!("CARGO_PKG_VERSION"),
+        service_instance_id: service_instance_id.to_string(),
+        deployment_env,
+        internal_org_id,
+    });
+
+    let exporter = match MetricExporter::builder()
+        .with_http()
+        .with_endpoint(format!("{forward_endpoint}/v1/metrics"))
+        .with_protocol(Protocol::HttpBinary)
+        .build()
+    {
+        Ok(exporter) => exporter,
+        Err(error) => {
+            eprintln!("Failed to build OTLP metric exporter: {error}; metrics disabled");
+            return None;
+        }
+    };
+
+    let reader = PeriodicReader::builder(exporter, OtelTokio)
+        .with_interval(Duration::from_secs(30))
+        .build();
+
+    let provider = SdkMeterProvider::builder()
+        .with_resource(resource)
+        .with_reader(reader)
+        .build();
+
+    opentelemetry::global::set_meter_provider(provider.clone());
+
+    Some(provider)
+}
+
 fn endpoint_loopback_to_self(forward_endpoint: &str, bind_port: u16) -> bool {
     let Ok(parsed) = url::Url::parse(forward_endpoint) else {
         return false;
@@ -854,10 +905,6 @@ fn endpoint_loopback_to_self(forward_endpoint: &str, bind_port: u16) -> bool {
 async fn main() {
     let _ = dotenvy::dotenv();
 
-    let prometheus_handle = metrics_exporter_prometheus::PrometheusBuilder::new()
-        .install_recorder()
-        .expect("Failed to install metrics recorder");
-
     let config = match AppConfig::from_env() {
         Ok(config) => config,
         Err(error) => {
@@ -866,7 +913,13 @@ async fn main() {
         }
     };
 
-    let tracer_provider = init_tracing(&config.forward_endpoint, config.port);
+    // One UUID per process, shared by the trace and metric resources so both
+    // signals attribute to the same `service.instance.id`.
+    let service_instance_id = uuid::Uuid::new_v4().to_string();
+    let tracer_provider =
+        init_tracing(&config.forward_endpoint, config.port, &service_instance_id);
+    let meter_provider =
+        init_metrics(&config.forward_endpoint, config.port, &service_instance_id);
 
     let http_client = match Client::builder()
         .timeout(config.forward_timeout)
@@ -956,7 +1009,6 @@ async fn main() {
         telemetry_pipeline,
         http_client,
         config: config.clone(),
-        metrics_handle: prometheus_handle,
         autumn_tracker,
     });
 
@@ -973,7 +1025,6 @@ async fn main() {
     let grpc_state = Arc::clone(&state);
     let app = Router::new()
         .route("/health", get(health))
-        .route("/metrics", get(serve_metrics))
         .route("/v1/traces", post(handle_traces))
         .route("/v1/logs", post(handle_logs))
         .route("/v1/metrics", post(handle_metrics))
@@ -1039,6 +1090,11 @@ async fn main() {
     if let Some(provider) = tracer_provider {
         // Flush buffered spans on graceful exit. Errors here are non-fatal —
         // the process is shutting down anyway.
+        let _ = provider.shutdown();
+    }
+
+    if let Some(provider) = meter_provider {
+        // Flush the final metric export on graceful exit.
         let _ = provider.shutdown();
     }
 
@@ -1272,10 +1328,6 @@ async fn health() -> &'static str {
     "OK"
 }
 
-async fn serve_metrics(State(state): State<Arc<AppState>>) -> String {
-    state.metrics_handle.render()
-}
-
 async fn handle_traces(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -1324,7 +1376,7 @@ async fn handle_signal(
     let start = Instant::now();
     let body_bytes = body.len();
 
-    gauge!("ingest_requests_in_flight").increment(1.0);
+    metrics::request_started();
     let _guard = InFlightGuard;
 
     let route = format!("/v1/{}", signal.path());
@@ -1361,10 +1413,7 @@ async fn handle_signal(
             let status_code = response.status().as_u16();
             span_handle.record("http.response.status_code", status_code);
             span_handle.record("otel.status_code", "Ok");
-            histogram!("ingest_request_duration_seconds", "signal" => signal.path(), "status" => "ok")
-                .record(duration.as_secs_f64());
-            counter!("ingest_requests_total", "signal" => signal.path(), "status" => "ok", "error_kind" => "none")
-                .increment(1);
+            metrics::request_completed(signal.path(), "ok", "none", duration.as_secs_f64());
             if let Some(tracker) = &state.autumn_tracker {
                 if org_id != SENTINEL_ORG_ID {
                     let feature_id = signal.path();
@@ -1382,10 +1431,7 @@ async fn handle_signal(
             span_handle.record("http.response.status_code", error.status.as_u16());
             span_handle.record("error.type", error_kind);
             span_handle.record("otel.status_code", "Error");
-            histogram!("ingest_request_duration_seconds", "signal" => signal.path(), "status" => "error")
-                .record(duration.as_secs_f64());
-            counter!("ingest_requests_total", "signal" => signal.path(), "status" => "error", "error_kind" => error_kind)
-                .increment(1);
+            metrics::request_completed(signal.path(), "error", error_kind, duration.as_secs_f64());
             error.into_response()
         }
     }
@@ -1401,7 +1447,7 @@ async fn handle_cloudflare_logpush(
     let start = Instant::now();
     let body_bytes = body.len();
 
-    gauge!("ingest_requests_in_flight").increment(1.0);
+    metrics::request_started();
     let _guard = InFlightGuard;
 
     let route = format!("/v1/logpush/cloudflare/http_requests/{connector_id}");
@@ -1439,20 +1485,8 @@ async fn handle_cloudflare_logpush(
             span_handle.record("otel.status_code", "Ok");
             span_handle.record("maple.ingest.item_count", item_count);
             span_handle.record("maple.cloudflare.is_validation", is_validation);
-            histogram!("ingest_request_duration_seconds", "signal" => "logs", "status" => "ok")
-                .record(duration.as_secs_f64());
-            counter!("ingest_requests_total", "signal" => "logs", "status" => "ok", "error_kind" => "none")
-                .increment(1);
-            counter!(
-                "ingest_cloudflare_batches_total",
-                "dataset" => "http_requests",
-                "validation" => if is_validation { "true" } else { "false" }
-            )
-            .increment(1);
-            if is_validation {
-                counter!("ingest_cloudflare_validation_total", "dataset" => "http_requests")
-                    .increment(1);
-            }
+            metrics::request_completed("logs", "ok", "none", duration.as_secs_f64());
+            metrics::cloudflare_batch("http_requests", is_validation);
             info!(
                 status = status_code,
                 duration_ms = duration.as_millis() as u64,
@@ -1466,17 +1500,12 @@ async fn handle_cloudflare_logpush(
             span_handle.record("http.response.status_code", error.status.as_u16());
             span_handle.record("error.type", error_kind);
             span_handle.record("otel.status_code", "Error");
-            histogram!("ingest_request_duration_seconds", "signal" => "logs", "status" => "error")
-                .record(duration.as_secs_f64());
-            counter!("ingest_requests_total", "signal" => "logs", "status" => "error", "error_kind" => error_kind)
-                .increment(1);
+            metrics::request_completed("logs", "error", error_kind, duration.as_secs_f64());
             if error_kind == "auth" {
-                counter!("ingest_cloudflare_auth_failures_total", "dataset" => "http_requests")
-                    .increment(1);
+                metrics::cloudflare_auth_failure("http_requests");
             }
             if error_kind == "parse" {
-                counter!("ingest_cloudflare_parse_failures_total", "dataset" => "http_requests")
-                    .increment(1);
+                metrics::cloudflare_parse_failure("http_requests");
             }
             error.into_response()
         }
@@ -1497,7 +1526,7 @@ async fn handle_signal_inner(
     })?;
 
     if is_sentinel_token(&ingest_key) {
-        counter!("ingest_sentinel_total", "signal" => signal.path()).increment(1);
+        metrics::sentinel(signal.path());
         Span::current().record("maple.org_id", SENTINEL_ORG_ID);
         Span::current().record("maple.ingest.key_type", "sentinel");
         debug!("Sentinel token; skipping resolve and forward");
@@ -1525,8 +1554,7 @@ async fn handle_signal_inner(
             warn!("Unknown ingest key");
             (ApiError::unauthorized("Invalid ingest key"), "auth")
         })?;
-    histogram!("ingest_key_resolution_duration_seconds")
-        .record(key_resolve_start.elapsed().as_secs_f64());
+    metrics::key_resolution_duration(key_resolve_start.elapsed().as_secs_f64());
 
     Span::current().record("maple.org_id", &resolved_key.org_id.as_str());
     Span::current().record("maple.ingest.key_type", resolved_key.key_type.as_str());
@@ -1584,7 +1612,7 @@ async fn handle_signal_inner(
         content_encoding.as_deref().unwrap_or("identity"),
     );
 
-    histogram!("ingest_request_body_bytes", "signal" => signal.path()).record(body.len() as f64);
+    metrics::request_body_bytes(signal.path(), body.len() as u64);
 
     // --- Decode ---
     let decoded_payload = decode_payload(&body, content_encoding.as_deref()).map_err(|e| {
@@ -1599,8 +1627,7 @@ async fn handle_signal_inner(
         encoding = encoding_label,
         "Payload decoded"
     );
-    histogram!("ingest_decoded_body_bytes", "signal" => signal.path())
-        .record(decoded_payload.len() as f64);
+    metrics::decoded_body_bytes(signal.path(), decoded_payload.len() as u64);
 
     // --- Enrich ---
     let decoded =
@@ -1621,11 +1648,7 @@ async fn handle_signal_inner(
 
     Span::current().record("maple.ingest.item_count", item_count);
     debug!(item_count, "Payload enriched");
-    counter!(
-        "ingest_items_total",
-        "signal" => signal.path()
-    )
-    .increment(item_count as u64);
+    metrics::items_accepted(signal.path(), item_count as u64);
 
     let decoded_bytes = decoded_payload.len();
 
@@ -1785,11 +1808,7 @@ async fn handle_cloudflare_logpush_inner(
         ParsedCloudflarePayload::Records(records) => {
             let request = build_cloudflare_logs_request(&resolved, records);
             let item_count = count_log_items(&request);
-            counter!(
-                "ingest_cloudflare_records_total",
-                "dataset" => resolved.dataset.clone()
-            )
-            .increment(item_count as u64);
+            metrics::cloudflare_records(&resolved.dataset, item_count as u64);
 
             let resolved_key = ResolvedIngestKey {
                 org_id: resolved.org_id.clone(),
@@ -2394,19 +2413,8 @@ async fn forward_to_collector(
         let forward_duration = forward_start.elapsed();
         Span::current().record("error.type", "transport");
         Span::current().record("otel.status_code", "Error");
-        histogram!(
-            "ingest_forward_duration_seconds",
-            "signal" => signal.path(),
-            "upstream_pool" => upstream_pool,
-        )
-        .record(forward_duration.as_secs_f64());
-        counter!(
-            "ingest_forward_responses_total",
-            "signal" => signal.path(),
-            "upstream_status" => "error",
-            "upstream_pool" => upstream_pool,
-        )
-        .increment(1);
+        metrics::forward_duration(signal.path(), upstream_pool, forward_duration.as_secs_f64());
+        metrics::forward_response(signal.path(), "error", upstream_pool);
         error!(
             error = %error,
             signal = signal.path(),
@@ -2420,12 +2428,7 @@ async fn forward_to_collector(
     })?;
 
     let forward_duration = forward_start.elapsed();
-    histogram!(
-        "ingest_forward_duration_seconds",
-        "signal" => signal.path(),
-        "upstream_pool" => upstream_pool,
-    )
-    .record(forward_duration.as_secs_f64());
+    metrics::forward_duration(signal.path(), upstream_pool, forward_duration.as_secs_f64());
 
     let upstream_status_code = response.status().as_u16();
     Span::current().record("http.response.status_code", upstream_status_code);
@@ -2443,13 +2446,7 @@ async fn forward_to_collector(
         500..=599 => "5xx",
         _ => "other",
     };
-    counter!(
-        "ingest_forward_responses_total",
-        "signal" => signal.path(),
-        "upstream_status" => status_bucket,
-        "upstream_pool" => upstream_pool,
-    )
-    .increment(1);
+    metrics::forward_response(signal.path(), status_bucket, upstream_pool);
 
     debug!(
         upstream_status = upstream_status_code,
@@ -2553,22 +2550,10 @@ async fn process_decoded_payload(
             );
             api_error
         })?;
-        histogram!(
-            "ingest_native_accept_duration_seconds",
-            "signal" => signal.path()
-        )
-        .record(native_start.elapsed().as_secs_f64());
-        counter!(
-            "ingest_native_rows_total",
-            "signal" => signal.path()
-        )
-        .increment(stats.rows as u64);
+        metrics::native_accept_duration(signal.path(), native_start.elapsed().as_secs_f64());
+        metrics::native_rows(signal.path(), stats.rows as u64);
         if stats.dropped > 0 {
-            counter!(
-                "ingest_native_sampled_dropped_total",
-                "signal" => signal.path()
-            )
-            .increment(stats.dropped as u64);
+            metrics::native_sampled_dropped(signal.path(), stats.dropped as u64);
         }
         Span::current().record("maple.ingest.native_rows", stats.rows as u64);
         Span::current().record("maple.ingest.sampled_dropped", stats.dropped as u64);

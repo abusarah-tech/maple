@@ -13,6 +13,7 @@ import { METRIC_NEEDS } from "../../traces-shared"
 import type { ColumnDefs } from "../types"
 import {
 	apdexExprs,
+	buildProjectedMapExpr,
 	canUseServiceOverviewMv,
 	canUseTracesAggregatesMv,
 	serviceOverviewWhereConditions,
@@ -358,21 +359,6 @@ export interface TracesListOutput {
 	readonly hasError: number
 	readonly spanAttributes: Record<string, string>
 	readonly resourceAttributes: Record<string, string>
-}
-
-/**
- * Build a ClickHouse map() literal that extracts only the requested attribute keys.
- */
-function buildProjectedMapExpr(
-	requestedKeys: string[],
-	mapName: "SpanAttributes" | "ResourceAttributes",
-): CH.Expr<Record<string, string>> {
-	if (requestedKeys.length === 0) return CH.mapLiteral()
-	const pairs: Array<[string, CH.Expr<string>]> = requestedKeys.map((key) => {
-		const valueExpr: CH.Expr<string> = CH.mapGet(CH.dynamicColumn<Record<string, string>>(mapName), key)
-		return [key, valueExpr]
-	})
-	return CH.mapLiteral(...pairs)
 }
 
 export function tracesListQuery(opts: TracesListOpts) {

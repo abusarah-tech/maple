@@ -1,5 +1,21 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M6 3H18",
+	"M8.01001 20L8.00001 20",
+	"M6.01001 18L6.00001 18",
+	"M16.01 20L16 20",
+	"M18.01 18L18 18",
+	"M4 16V5",
+	"M20 16V5",
+	"M10 22H14",
+	"M10 14.01V14",
+	"M12 12.01V12",
+	"M14 10.01V10",
+	"M16 8.01V8",
+	"M8 12.01V12",
+]
+
 function ShieldIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,20 +28,9 @@ function ShieldIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<path
-				d="M21 12.25C21 19 12 22 12 22C12 22 3 19 3 12.25V4.75L12 2.5L21 4.75V12.25Z"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-				strokeLinecap="square"
-			/>
-			<path
-				d="M12 15.5L8 11.5L12 7.5L16 11.5L12 15.5Z"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-				strokeLinecap="square"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

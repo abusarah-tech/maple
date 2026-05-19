@@ -45,6 +45,28 @@ export function apdexExprs(durationMs: CH.Expr<number>, thresholdMs: number) {
 }
 
 // ---------------------------------------------------------------------------
+// Attribute map projection
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a ClickHouse `map()` literal that extracts only the requested attribute
+ * keys from a Map column. Selecting the full `SpanAttributes` / `ResourceAttributes`
+ * map for every row materializes large per-row JSON — projecting just the keys
+ * the UI renders is a large win on wide traces.
+ */
+export function buildProjectedMapExpr(
+	requestedKeys: readonly string[],
+	mapName: "SpanAttributes" | "ResourceAttributes" | "LogAttributes",
+): CH.Expr<Record<string, string>> {
+	if (requestedKeys.length === 0) return CH.mapLiteral()
+	const pairs: Array<[string, CH.Expr<string>]> = requestedKeys.map((key) => {
+		const valueExpr: CH.Expr<string> = CH.mapGet(CH.dynamicColumn<Record<string, string>>(mapName), key)
+		return [key, valueExpr]
+	})
+	return CH.mapLiteral(...pairs)
+}
+
+// ---------------------------------------------------------------------------
 // Traces base WHERE conditions
 // ---------------------------------------------------------------------------
 

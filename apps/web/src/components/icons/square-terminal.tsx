@@ -1,5 +1,7 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = ["M3 4H21V20H3Z", "M7 9L10 12L7 15", "M12 15H16"]
+
 function SquareTerminalIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,21 +14,9 @@ function SquareTerminalIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<path
-				d="M21 3H3V21H21V3Z"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-				strokeLinecap="square"
-			/>
-			<path
-				d="M7.5 15.5L10.5 12.5L7.5 9.5"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-				strokeLinecap="square"
-			/>
-			<path d="M13 16H17" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

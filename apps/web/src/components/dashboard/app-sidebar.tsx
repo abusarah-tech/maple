@@ -349,8 +349,8 @@ export function AppSidebar() {
 					</SidebarGroup>
 				))}
 
-				<Collapsible defaultOpen className="group/dashboards flex flex-1 min-h-0 flex-col">
-					<SidebarGroup className="flex flex-1 min-h-0 flex-col">
+				<Collapsible defaultOpen className="group/dashboards flex flex-col">
+					<SidebarGroup className="flex flex-col">
 						<SidebarGroupLabel render={<CollapsibleTrigger />}>
 							<GridIcon size={14} className="mr-1 !size-3.5" />
 							Dashboards
@@ -362,9 +362,9 @@ export function AppSidebar() {
 								className="ml-auto !size-3.5 transition-transform group-data-[open]/dashboards:rotate-90"
 							/>
 						</SidebarGroupLabel>
-						<CollapsibleContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
-							<SidebarGroupContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
-								<SidebarMenu className="flex min-h-0 flex-1 flex-col overflow-hidden">
+						<CollapsibleContent className="flex flex-col">
+							<SidebarGroupContent className="flex flex-col">
+								<SidebarMenu className="flex flex-col">
 									<SidebarMenuItem>
 										<SidebarMenuButton
 											render={<Link to="/dashboards" />}
@@ -379,7 +379,7 @@ export function AppSidebar() {
 										</SidebarMenuButton>
 									</SidebarMenuItem>
 									{!isLoading && dashboards.length > 0 && (
-										<SidebarMenuSub className="min-h-0 flex-1 overflow-y-auto">
+										<SidebarMenuSub className="max-h-40 overflow-y-auto [mask-image:linear-gradient(to_bottom,transparent_0,black_8px,black_calc(100%-8px),transparent_100%)]">
 											{favoriteDashboards.map((dashboard) => (
 												<SidebarMenuSubItem key={dashboard.id}>
 													<SidebarMenuSubButton

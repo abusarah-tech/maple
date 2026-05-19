@@ -26,9 +26,9 @@ import { formatDuration } from "@/lib/format"
 import { cn } from "@maple/ui/utils"
 import { getCacheInfo, cacheResultStyles } from "@/lib/cache"
 import { getServiceLegendColor } from "@maple/ui/lib/colors"
-import type { SpanNode } from "@/api/tinybird/traces"
+import type { SpanNode, SpanDetailResult } from "@/api/tinybird/traces"
 import { disabledResultAtom } from "@/lib/services/atoms/disabled-result-atom"
-import { listLogsResultAtom } from "@/lib/services/atoms/tinybird-query-atoms"
+import { getSpanDetailResultAtom, listLogsResultAtom } from "@/lib/services/atoms/tinybird-query-atoms"
 import { CopyableValue, AttributesTable, ResourceAttributesSection } from "@/components/attributes"
 import { useTimezonePreference } from "@/hooks/use-timezone-preference"
 import { formatTimestampInTimezone } from "@/lib/timezone-format"
@@ -253,6 +253,18 @@ export function SpanDetailPanel({ span, services, onClose }: SpanDetailPanelProp
 	)
 	const logCount = Result.isSuccess(logsResult) ? logsResult.value.data.length : null
 
+	// Full attribute maps are loaded lazily here — the span hierarchy query only
+	// returns the trimmed keys the tree views render. span.startTime is a
+	// timestamp inside the trace, used to narrow the partition scan.
+	const detailResult = useAtomValue(
+		span.traceId && span.spanId && !span.isMissing
+			? getSpanDetailResultAtom({
+					data: { traceId: span.traceId, spanId: span.spanId, timestamp: span.startTime },
+				})
+			: disabledResultAtom<SpanDetailResult>(),
+	)
+	const detailAttrs = Result.isSuccess(detailResult) ? detailResult.value : null
+
 	return (
 		<div className="flex flex-col h-full border-l bg-background overflow-hidden">
 			{/* Header */}
@@ -335,7 +347,7 @@ export function SpanDetailPanel({ span, services, onClose }: SpanDetailPanelProp
 					message={span.statusMessage}
 					serviceName={span.serviceName}
 					spanName={span.spanName}
-					attributes={span.spanAttributes}
+					attributes={detailAttrs?.spanAttributes ?? span.spanAttributes}
 				/>
 			)}
 
@@ -413,11 +425,47 @@ export function SpanDetailPanel({ span, services, onClose }: SpanDetailPanelProp
 								</div>
 							</div>
 
-							{/* Span Attributes */}
-							<AttributesTable attributes={span.spanAttributes ?? {}} title="Span Attributes" />
-
-							{/* Resource Attributes */}
-							<ResourceAttributesSection attributes={span.resourceAttributes ?? {}} />
+							{/* Span + Resource Attributes — loaded lazily for the
+							    selected span (see detailResult above) */}
+							{span.isMissing ? (
+								<AttributesTable
+									attributes={span.spanAttributes ?? {}}
+									title="Span Attributes"
+								/>
+							) : (
+								Result.builder(detailResult)
+									.onInitial(() => (
+										<div className="space-y-2">
+											<Skeleton className="h-4 w-32" />
+											<Skeleton className="h-24 w-full" />
+											<Skeleton className="h-4 w-32" />
+											<Skeleton className="h-24 w-full" />
+										</div>
+									))
+									.onError(() => (
+										<>
+											<AttributesTable
+												attributes={span.spanAttributes ?? {}}
+												title="Span Attributes"
+											/>
+											<ResourceAttributesSection
+												attributes={span.resourceAttributes ?? {}}
+											/>
+										</>
+									))
+									.onSuccess((detail) => (
+										<>
+											<AttributesTable
+												attributes={detail.spanAttributes}
+												title="Span Attributes"
+											/>
+											<ResourceAttributesSection
+												attributes={detail.resourceAttributes}
+											/>
+										</>
+									))
+									.render()
+							)}
 						</div>
 					</ScrollArea>
 				</TabsContent>

@@ -1,5 +1,23 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M12 2L12 2.01",
+	"M12 14L12 14.01",
+	"M20 8L20 8.01",
+	"M4 8L4 8.01",
+	"M15 4L14 4",
+	"M10 4L9 4",
+	"M10 12L9 12",
+	"M15 12L14 12",
+	"M18 10L17 10",
+	"M7 6L6 6",
+	"M7 10L6 10",
+	"M18 6L17 6",
+	"M2 10V19",
+	"M22 10V19",
+	"M20 21L4 21",
+]
+
 function EnvelopeIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,19 +30,9 @@ function EnvelopeIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<polyline points="2 8 12 13 22 8" stroke="currentColor" strokeMiterlimit="10" strokeWidth="2" />
-			<rect
-				x="2"
-				y="4"
-				width="20"
-				height="16"
-				rx="2"
-				ry="2"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

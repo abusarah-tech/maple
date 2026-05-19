@@ -10,6 +10,7 @@ import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import { AlertPreviewChart } from "@/components/alerts/alert-preview-chart"
 import { AlertStatusBadge } from "@/components/alerts/alert-status-badge"
 import { RuleSentenceBuilder } from "@/components/alerts/rule-sentence-builder"
+import { ProviderLogo } from "@/components/alerts/destination-provider"
 import {
 	AlertSegmentedSelect,
 	AlertMultiSegmentedSelect,
@@ -44,6 +45,7 @@ import { Button } from "@maple/ui/components/ui/button"
 import { Card, CardContent } from "@maple/ui/components/ui/card"
 import { Input } from "@maple/ui/components/ui/input"
 import { Label } from "@maple/ui/components/ui/label"
+import { Textarea } from "@maple/ui/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@maple/ui/components/ui/select"
 import {
 	Combobox,
@@ -606,6 +608,20 @@ function AlertCreatePage() {
 						</div>
 					</div>
 
+					{/* Notes */}
+					<div className="space-y-2">
+						<Label htmlFor="rule-notes">
+							Notes <span className="text-muted-foreground font-normal">(optional)</span>
+						</Label>
+						<Textarea
+							id="rule-notes"
+							value={ruleForm.notes}
+							onChange={(e) => setRuleForm((c) => ({ ...c, notes: e.target.value }))}
+							placeholder="Runbook links, ownership, or why this rule exists…"
+							rows={3}
+						/>
+					</div>
+
 					{/* Notify via */}
 					<div>
 						<Label className="mb-2 block">Notify via</Label>
@@ -621,6 +637,7 @@ function AlertCreatePage() {
 								options={
 									destinations.map((d) => ({
 										value: d.id as unknown as string,
+										icon: <ProviderLogo type={d.type} size={28} bare />,
 										label: (
 											<span className="flex items-center gap-2">
 												<span className="font-medium">{d.name}</span>

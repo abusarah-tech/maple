@@ -1,5 +1,23 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M8 2L16 2",
+	"M8 22L16 22",
+	"M2 8L2 16",
+	"M22 8L22 16",
+	"M6 4L6 4.01",
+	"M4 6L4 6.01",
+	"M18 4L18 4.01",
+	"M20 6L20 6.01",
+	"M6 20L6 20.01",
+	"M4 18L4 18.01",
+	"M18 20L18 20.01",
+	"M20 18L20 18.01",
+	"M8 16L16 8",
+	"M8 8H10V10H8Z",
+	"M14 14H16V16H14Z",
+]
+
 function CirclePercentageIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,34 +30,9 @@ function CirclePercentageIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<path
-				d="M12 22C17.52 22 22 17.52 22 12C22 6.47 17.52 2 12 2C6.47 2 2 6.47 2 12C2 17.52 6.47 22 12 22Z"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-				strokeLinecap="square"
-			/>
-			<path
-				d="M8.5 10.5C9.60 10.5 10.5 9.60 10.5 8.5C10.5 7.39 9.60 6.5 8.5 6.5C7.39 6.5 6.5 7.39 6.5 8.5C6.5 9.60 7.39 10.5 8.5 10.5Z"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-				strokeLinecap="square"
-			/>
-			<path
-				d="M15.5 17.5C16.60 17.5 17.5 16.60 17.5 15.5C17.5 14.39 16.60 13.5 15.5 13.5C14.39 13.5 13.5 14.39 13.5 15.5C13.5 16.60 14.39 17.5 15.5 17.5Z"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-				strokeLinecap="square"
-			/>
-			<path
-				d="M7.5 16.5L12 12L16.5 7.5"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-				strokeLinecap="square"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

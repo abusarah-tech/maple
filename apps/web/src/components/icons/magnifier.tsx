@@ -1,5 +1,18 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M15 19H7",
+	"M15 3L7 3",
+	"M3 15L3 7",
+	"M19 15L19 7",
+	"M19 19L19 19.01",
+	"M21 21L21 21.01",
+	"M5 17L5 17.01",
+	"M17 17L17 17.01",
+	"M17 5L17 5.01",
+	"M5 5L5 5.01",
+]
+
 function MagnifierIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,25 +25,9 @@ function MagnifierIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<line
-				x1="20.5"
-				y1="20.5"
-				x2="15"
-				y2="15"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<circle
-				cx="10"
-				cy="10"
-				r="7"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

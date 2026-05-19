@@ -34,6 +34,24 @@ export class SpanHierarchyResponse extends Schema.Class<SpanHierarchyResponse>("
 	),
 }) {}
 
+export class SpanDetailRequest extends Schema.Class<SpanDetailRequest>("SpanDetailRequest")({
+	traceId: Schema.String,
+	spanId: Schema.String,
+	startTime: Schema.optional(TinybirdDateTime),
+	endTime: Schema.optional(TinybirdDateTime),
+}) {}
+
+export class SpanDetailResponse extends Schema.Class<SpanDetailResponse>("SpanDetailResponse")({
+	data: Schema.NullOr(
+		Schema.Struct({
+			traceId: Schema.String,
+			spanId: Schema.String,
+			spanAttributes: Schema.String,
+			resourceAttributes: Schema.String,
+		}),
+	),
+}) {}
+
 const OptionalStringArray = Schema.optional(Schema.Array(Schema.String))
 
 export class ErrorsByTypeRequest extends Schema.Class<ErrorsByTypeRequest>("ErrorsByTypeRequest")({
@@ -979,6 +997,13 @@ export class QueryEngineApiGroup extends HttpApiGroup.make("queryEngine")
 		HttpApiEndpoint.post("spanHierarchy", "/span-hierarchy", {
 			payload: SpanHierarchyRequest,
 			success: SpanHierarchyResponse,
+			error: queryEngineEndpointErrors,
+		}),
+	)
+	.add(
+		HttpApiEndpoint.post("spanDetail", "/span-detail", {
+			payload: SpanDetailRequest,
+			success: SpanDetailResponse,
 			error: queryEngineEndpointErrors,
 		}),
 	)

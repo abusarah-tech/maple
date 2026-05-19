@@ -1,5 +1,17 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M8 3H16",
+	"M5 4L5 4.01",
+	"M19 4L19 4.01",
+	"M3 6V18",
+	"M21 6V18",
+	"M3 12H21",
+	"M8 21H16",
+	"M5 20L5 20.01",
+	"M19 20L19 20.01",
+]
+
 function DatabaseIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,29 +24,9 @@ function DatabaseIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<path
-				d="m3,5v14c0,1.7,4,3,9,3s9-1.3,9-3V5"
-				stroke="currentColor"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<ellipse
-				cx="12"
-				cy="5"
-				rx="9"
-				ry="3"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<path
-				d="m21,12c0,1.7-4,3-9,3s-9-1.3-9-3"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

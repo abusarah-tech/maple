@@ -1,5 +1,24 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M7 2V5",
+	"M2 5H12",
+	"M4.00001 7.00001L4 7.01001",
+	"M5.00001 9.00001L5 9.01001",
+	"M9.00001 13L9 13.01",
+	"M7.00001 11L7 11.01",
+	"M10 7.00001L10 7.01001",
+	"M9.00001 9.00001L9 9.01001",
+	"M5.00001 13L5 13.01",
+	"M3.00001 14L3 14.01",
+	"M17 8.01V8",
+	"M19 12V10",
+	"M15 12V10",
+	"M12 20V18",
+	"M13 14V17H21V14",
+	"M22 20V18",
+]
+
 function LanguageIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,56 +31,9 @@ function LanguageIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<line
-				x1="3"
-				y1="6"
-				x2="13"
-				y2="6"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<line
-				x1="8"
-				y1="3"
-				x2="8"
-				y2="6"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<polyline
-				points="12 21 12 21 16 10 17 10 21 21 20.99 21"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<line
-				x1="13.09"
-				y1="18"
-				x2="19.90"
-				y2="18"
-				stroke="currentColor"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<path
-				d="m10,6h1c-.533,7.5-8,8-8,8"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<path
-				d="m10.50,13.40c-2.22-.829-5.17-2.79-5.50-7.40h1"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

@@ -10,6 +10,7 @@ import {
 	TinybirdQueryError,
 	TinybirdQuotaExceededError,
 	SpanHierarchyResponse,
+	SpanDetailResponse,
 	ErrorsByTypeResponse,
 	ErrorsTimeseriesResponse,
 	ErrorsSummaryResponse,
@@ -110,6 +111,36 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 					)
 					const typedRows = compiled.castRows(rows)
 					return new SpanHierarchyResponse({ data: typedRows })
+				}),
+			)
+			.handle("spanDetail", ({ payload }) =>
+				Effect.gen(function* () {
+					const tenant = yield* CurrentTenant.Context
+					const narrowByTime = payload.startTime != null && payload.endTime != null
+					const compiled = CH.compile(
+						CH.spanDetailQuery({
+							traceId: payload.traceId,
+							spanId: payload.spanId,
+							narrowByTime,
+						}),
+						narrowByTime
+							? { orgId: tenant.orgId, startTime: payload.startTime, endTime: payload.endTime }
+							: { orgId: tenant.orgId },
+					)
+					const rows = yield* queryEngine.cachedDirect(
+						tenant,
+						"spanDetail",
+						payload,
+						mapExecError(
+							warehouse.sqlQuery(tenant, compiled.sql, {
+								profile: "discovery",
+								context: "spanDetail",
+							}),
+							"spanDetail query failed",
+						),
+					)
+					const typedRows = compiled.castRows(rows)
+					return new SpanDetailResponse({ data: typedRows[0] ?? null })
 				}),
 			)
 			.handle("errorsByType", ({ payload }) =>
@@ -548,7 +579,7 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 			.handle("listMetrics", ({ payload }) =>
 				Effect.gen(function* () {
 					const tenant = yield* CurrentTenant.Context
-					const compiled = CH.compileUnion(
+					const compiled = CH.compile(
 						CH.listMetricsQuery({
 							serviceName: payload.service,
 							metricType: payload.metricType,
@@ -571,10 +602,11 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 			.handle("metricsSummary", ({ payload }) =>
 				Effect.gen(function* () {
 					const tenant = yield* CurrentTenant.Context
-					const compiled = CH.compileUnion(
-						CH.metricsSummaryQuery({ serviceName: payload.service }),
-						{ orgId: tenant.orgId, startTime: payload.startTime, endTime: payload.endTime },
-					)
+					const compiled = CH.compile(CH.metricsSummaryQuery({ serviceName: payload.service }), {
+						orgId: tenant.orgId,
+						startTime: payload.startTime,
+						endTime: payload.endTime,
+					})
 					const rows = yield* mapExecError(
 						warehouse.sqlQuery(tenant, compiled.sql, {
 							profile: "discovery",

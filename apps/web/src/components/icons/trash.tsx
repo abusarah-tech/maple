@@ -1,5 +1,15 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M17 22L7 22",
+	"M19 10V20",
+	"M5 10V20",
+	"M21 6H3",
+	"M16 4H16.01",
+	"M8.00001 4H8.01001",
+	"M14 2H10",
+]
+
 function TrashIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,45 +22,9 @@ function TrashIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<path
-				d="m18.83,8l-.503,12.08c-.045,1.07-.926,1.91-1.99,1.91H7.66c-1.07,0-1.95-.845-1.99-1.91l-.503-12.08"
-				stroke="currentColor"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<path
-				d="m10,4v-1c0-.552.44-1,1-1h2c.552,0,1,.448,1,1v1"
-				stroke="currentColor"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<line
-				x1="10"
-				y1="18"
-				x2="10"
-				y2="12"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<line
-				x1="14"
-				y1="18"
-				x2="14"
-				y2="12"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<path
-				d="m5,4h14c1.10,0,2,.896,2,2v2H3v-2c0-1.10.896-2,2-2Z"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

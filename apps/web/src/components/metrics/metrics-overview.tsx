@@ -6,11 +6,24 @@ import { MetricsVolumeChart } from "./metrics-volume-chart"
 import { MetricsTable } from "./metrics-table"
 import type { Metric } from "@/api/tinybird/metrics"
 import type { GetMetricTimeSeriesInput } from "@/api/tinybird/metrics"
+import { useEffectiveTimeRange } from "@/hooks/use-effective-time-range"
 
-export function MetricsOverview() {
+interface MetricsOverviewProps {
+	startTime?: string
+	endTime?: string
+	timePreset?: string
+}
+
+export function MetricsOverview({ startTime, endTime, timePreset }: MetricsOverviewProps) {
 	const [search, setSearch] = useState("")
 	const [selectedType, setSelectedType] = useState<MetricType | null>(null)
 	const [selectedMetric, setSelectedMetric] = useState<Metric | null>(null)
+
+	const { startTime: effectiveStartTime, endTime: effectiveEndTime } = useEffectiveTimeRange(
+		startTime,
+		endTime,
+		timePreset ?? "24h",
+	)
 
 	const handleSelectType = (type: MetricType | null) => {
 		setSelectedType(type)
@@ -23,7 +36,12 @@ export function MetricsOverview() {
 
 	return (
 		<div className="space-y-6">
-			<MetricsSummaryCards selectedType={selectedType} onSelectType={handleSelectType} />
+			<MetricsSummaryCards
+				selectedType={selectedType}
+				onSelectType={handleSelectType}
+				startTime={effectiveStartTime}
+				endTime={effectiveEndTime}
+			/>
 
 			<div className="flex items-center gap-4">
 				<Input
@@ -43,6 +61,8 @@ export function MetricsOverview() {
 				metricName={selectedMetric?.metricName ?? null}
 				metricType={(selectedMetric?.metricType as GetMetricTimeSeriesInput["metricType"]) ?? null}
 				serviceName={selectedMetric?.serviceName ?? null}
+				startTime={effectiveStartTime}
+				endTime={effectiveEndTime}
 			/>
 
 			<div>
@@ -52,6 +72,8 @@ export function MetricsOverview() {
 					metricType={selectedType}
 					selectedMetric={selectedMetric}
 					onSelectMetric={handleSelectMetric}
+					startTime={effectiveStartTime}
+					endTime={effectiveEndTime}
 				/>
 			</div>
 		</div>

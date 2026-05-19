@@ -1,5 +1,21 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M6 8H6.01",
+	"M10 8H10.01",
+	"M4 4H20",
+	"M4 20H20",
+	"M2 6V18",
+	"M22 6V18",
+	"M8.00001 14H8.01001",
+	"M10 12H10.01",
+	"M12 14H12.01",
+	"M14 16H14.01",
+	"M16 14H16.01",
+	"M18 12H18.01",
+	"M6.00001 16H6.01001",
+]
+
 function ChartLineIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,13 +28,9 @@ function ChartLineIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<path
-				d="M2.5 15.71L9.06 9.14L14.93 14.85L21.5 8.29"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeMiterlimit="10"
-				strokeLinecap="square"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

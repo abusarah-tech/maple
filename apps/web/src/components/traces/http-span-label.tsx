@@ -41,8 +41,8 @@ export function HttpSpanLabel({ spanName, spanAttributes, spanKind, className, t
 						fill="none"
 						stroke="currentColor"
 						strokeWidth="1.75"
-						strokeLinecap="round"
-						strokeLinejoin="round"
+						strokeLinecap="square"
+						strokeLinejoin="miter"
 					>
 						<path d="M3 7L7 3" />
 						<path d="M3.5 3H7v3.5" />

@@ -1,5 +1,7 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = ["M5 12L5 12.01", "M12 12L12 12.01", "M19 12L19 12.01"]
+
 function DotsIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,36 +14,9 @@ function DotsIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<circle
-				cx="12"
-				cy="12"
-				r=".75"
-				fill="currentColor"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<circle
-				cx="20.25"
-				cy="12"
-				r=".75"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-				fill="currentColor"
-			/>
-			<circle
-				cx="3.75"
-				cy="12"
-				r=".75"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-				fill="currentColor"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="3" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

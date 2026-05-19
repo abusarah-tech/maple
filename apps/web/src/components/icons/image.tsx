@@ -1,23 +1,22 @@
 import type { IconProps } from "./icon"
 
 const paths: ReadonlyArray<string> = [
-	"M8 2L16 2",
-	"M8 22L16 22",
-	"M2 8L2 16",
-	"M22 8L22 16",
-	"M6 4L6 4.01",
-	"M4 6L4 6.01",
-	"M18 4L18 4.01",
-	"M20 6L20 6.01",
-	"M6 20L6 20.01",
-	"M4 18L4 18.01",
-	"M18 20L18 20.01",
-	"M20 18L20 18.01",
-	"M12 7V13",
-	"M12 16L12 16.01",
+	"M19 21H5",
+	"M19 3H5",
+	"M3 19L3 5",
+	"M21 19L21 5",
+	"M17 13L17 13.01",
+	"M15 15L15 15.01",
+	"M13 17L13 17.01",
+	"M11 19L11 19.01",
+	"M19 15L19 15.01",
+	"M9 7H10",
+	"M9 12H10",
+	"M12 9L12 10",
+	"M7 9L7 10",
 ]
 
-function CircleWarningIcon({ size = 24, className, ...props }: IconProps) {
+function ImageIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
@@ -35,4 +34,4 @@ function CircleWarningIcon({ size = 24, className, ...props }: IconProps) {
 		</svg>
 	)
 }
-export { CircleWarningIcon }
+export { ImageIcon }

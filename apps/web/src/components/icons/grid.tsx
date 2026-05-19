@@ -1,5 +1,12 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M4 4H10V10H4Z",
+	"M14 4H20V10H14Z",
+	"M4 14H10V20H4Z",
+	"M14 14H20V20H14Z",
+]
+
 function GridIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,54 +19,9 @@ function GridIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<rect
-				x="3"
-				y="3"
-				width="7"
-				height="7"
-				rx="1"
-				ry="1"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<rect
-				x="3"
-				y="14"
-				width="7"
-				height="7"
-				rx="1"
-				ry="1"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<rect
-				x="14"
-				y="3"
-				width="7"
-				height="7"
-				rx="1"
-				ry="1"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<rect
-				x="14"
-				y="14"
-				width="7"
-				height="7"
-				rx="1"
-				ry="1"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

@@ -1,5 +1,21 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M10 14V20H14V14",
+	"M18 10V20H22V10",
+	"M2 18V20H6V18",
+	"M4.01001 16L4.00001 16",
+	"M12.01 12L12 12",
+	"M2.01001 8L2.00001 8",
+	"M4.01001 6L4.00001 6",
+	"M6.01001 4L6.00001 4",
+	"M8.01001 6L8.00001 6",
+	"M10.01 8L10 8",
+	"M12.01 6L12 6",
+	"M14.01 4L14 4",
+	"M20.01 8L20 8",
+]
+
 function ChartBarTrendUpIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,10 +28,9 @@ function ChartBarTrendUpIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<path d="M10 12H14V21H10V12Z" stroke="currentColor" strokeWidth="2" />
-			<path d="M18 8H22V21H18V8Z" stroke="currentColor" strokeWidth="2" />
-			<path d="M2 16H6V21H2V16Z" stroke="currentColor" strokeWidth="2" />
-			<path d="M2 7L6 3L10 7L15 2" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

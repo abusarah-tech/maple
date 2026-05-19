@@ -1,5 +1,12 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = [
+	"M4 5H9V10H4Z",
+	"M9 10L18 19",
+	"M18 19L20 17",
+	"M14 15L16 13",
+]
+
 function KeyIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,23 +19,9 @@ function KeyIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<circle
-				cx="8"
-				cy="16"
-				r="1"
-				fill="currentColor"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<path
-				d="m17,2l-7.14,7.14c-.438-.093-.891-.144-1.35-.144-3.59,0-6.5,2.91-6.5,6.5s2.91,6.5,6.5,6.5,6.5-2.91,6.5-6.5c0-.749-.133-1.46-.366-2.13l2.36-2.36v-3h3l2-2V2h-5Z"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }

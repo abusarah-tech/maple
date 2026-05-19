@@ -26,3 +26,13 @@ export function intervalSub(col: Expr<string>, seconds: number | Expr<number>): 
 export function formatDateTime(col: Expr<string>, format: string): Expr<string> {
 	return makeExpr<string>(raw(`formatDateTime(${compile(col.toFragment())}, ${compile(str(format))})`))
 }
+
+/**
+ * `toDateTime(expr)` — coerce a value to DateTime. Needed when passing a
+ * string-typed param into functions (e.g. `toStartOfInterval`) that strictly
+ * require a Date/DateTime/DateTime64 argument and won't implicitly parse a
+ * string literal.
+ */
+export function toDateTime(col: Expr<string>): Expr<string> {
+	return makeExpr<string>(raw(`toDateTime(${compile(col.toFragment())})`))
+}

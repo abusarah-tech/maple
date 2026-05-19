@@ -1,5 +1,7 @@
 import type { IconProps } from "./icon"
 
+const paths: ReadonlyArray<string> = ["M3 4H21V20H3Z", "M9 4V20"]
+
 function LayoutLeftIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
@@ -12,28 +14,9 @@ function LayoutLeftIcon({ size = 24, className, ...props }: IconProps) {
 			aria-hidden="true"
 			{...props}
 		>
-			<rect
-				x="2"
-				y="4"
-				width="20"
-				height="16"
-				rx="2"
-				ry="2"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
-			<line
-				x1="6"
-				y1="16"
-				x2="6"
-				y2="8"
-				stroke="currentColor"
-				strokeLinecap="square"
-				strokeMiterlimit="10"
-				strokeWidth="2"
-			/>
+			{paths.map((d, i) => (
+				<path key={i} d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+			))}
 		</svg>
 	)
 }
