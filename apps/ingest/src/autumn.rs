@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use metrics::{counter, gauge, histogram};
+use maple_ingest::metrics;
 use reqwest::Client;
 use serde::Serialize;
 use tokio::sync::mpsc;
@@ -136,17 +136,13 @@ async fn flush_loop(
                 }
 
                 let flush_duration = flush_start.elapsed();
-                histogram!("autumn_track_flush_duration_seconds")
-                    .record(flush_duration.as_secs_f64());
 
                 if all_ok {
                     consecutive_failures = 0;
-                    counter!("autumn_track_flushes_total", "status" => "ok")
-                        .increment(1);
+                    metrics::autumn_flush("ok", flush_duration.as_secs_f64());
                 } else {
                     consecutive_failures += 1;
-                    counter!("autumn_track_flushes_total", "status" => "error")
-                        .increment(1);
+                    metrics::autumn_flush("error", flush_duration.as_secs_f64());
 
                     if consecutive_failures >= critical_threshold {
                         let total_pending_gb: f64 = accumulator.values().sum();
@@ -161,7 +157,7 @@ async fn flush_loop(
 
                 // Update pending gauge
                 let total_pending: f64 = accumulator.values().sum();
-                gauge!("autumn_track_pending_gb").set(total_pending);
+                metrics::autumn_pending_gb(total_pending);
             }
 
             event = rx.recv() => {

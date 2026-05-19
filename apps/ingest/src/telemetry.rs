@@ -11,7 +11,7 @@ use crc32fast::Hasher as Crc32;
 use dashmap::DashMap;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use metrics::{counter, gauge, histogram};
+use crate::metrics;
 use opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceRequest;
 use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequest;
 use opentelemetry_proto::tonic::collector::trace::v1::ExportTraceServiceRequest;
@@ -305,12 +305,7 @@ impl TelemetryPipeline {
         loop {
             let current = counter.load(Ordering::Relaxed);
             if current.saturating_add(bytes) > self.inner.cfg.org_queue_max_bytes {
-                counter!(
-                    "ingest_org_throttled_total",
-                    "org_id" => org_id.to_string(),
-                    "reason" => "queue_bytes"
-                )
-                .increment(1);
+                metrics::org_throttled(org_id, "queue_bytes");
                 return Err(PipelineError::Throttled(
                     "Telemetry org queue byte limit exceeded",
                 ));
@@ -324,11 +319,7 @@ impl TelemetryPipeline {
                 )
                 .is_ok()
             {
-                gauge!(
-                    "ingest_org_queue_bytes",
-                    "org_id" => org_id.to_string()
-                )
-                .set((current + bytes) as f64);
+                metrics::org_queue_bytes(org_id, current + bytes);
                 return Ok(());
             }
         }
@@ -420,8 +411,7 @@ impl ShardedWal {
                 .seek(SeekFrom::End(0))
                 .map_err(|error| format!("seek WAL: {error}"))?;
             if start.saturating_add(encoded.len() as u64) > shard_ref.max_bytes {
-                counter!("ingest_wal_shard_full_total", "shard" => shard.to_string())
-                    .increment(1);
+                metrics::wal_shard_full(shard);
                 return Err("Telemetry WAL shard is full".to_string());
             }
             file.write_all(&encoded)
@@ -429,9 +419,8 @@ impl ShardedWal {
             file.sync_data()
                 .map_err(|error| format!("sync WAL: {error}"))?;
             let end = start + encoded.len() as u64;
-            histogram!("ingest_wal_commit_bytes", "shard" => shard.to_string())
-                .record(encoded.len() as f64);
-            gauge!("ingest_wal_shard_bytes", "shard" => shard.to_string()).set(end as f64);
+            metrics::wal_commit_bytes(shard, encoded.len() as u64);
+            metrics::wal_shard_bytes(shard, end);
             Ok((start, end))
         })
         .await
@@ -473,7 +462,7 @@ impl ShardedWal {
                         .map_err(|error| format!("truncate WAL: {error}"))?;
                     file.sync_all()
                         .map_err(|error| format!("sync WAL truncate: {error}"))?;
-                    gauge!("ingest_wal_shard_bytes", "shard" => shard.to_string()).set(0.0);
+                    metrics::wal_shard_bytes(shard, 0);
                     0
                 } else {
                     offset
@@ -699,7 +688,7 @@ fn add_org_queue_bytes(counters: &Arc<DashMap<String, Arc<AtomicU64>>>, org_id: 
         .or_insert_with(|| Arc::new(AtomicU64::new(0)))
         .clone();
     let current = counter.fetch_add(bytes, Ordering::AcqRel) + bytes;
-    gauge!("ingest_org_queue_bytes", "org_id" => org_id.to_string()).set(current as f64);
+    metrics::org_queue_bytes(org_id, current);
 }
 
 fn release_org_queue_bytes(
@@ -716,8 +705,7 @@ fn release_org_queue_bytes(
             let next = current.saturating_sub(bytes);
             match counter.compare_exchange(current, next, Ordering::AcqRel, Ordering::Relaxed) {
                 Ok(_) => {
-                    gauge!("ingest_org_queue_bytes", "org_id" => org_id.to_string())
-                        .set(next as f64);
+                    metrics::org_queue_bytes(org_id, next);
                     return;
                 }
                 Err(observed) => current = observed,
@@ -775,7 +763,6 @@ impl ExportWorker {
 
         let start = Instant::now();
         let first_signal = frames[0].signal;
-        let first_shard = frames[0].shard;
         let first_offset = frames[0].start;
         for (datasource, frames) in by_datasource {
             let mut body = Vec::new();
@@ -795,14 +782,12 @@ impl ExportWorker {
         for frame in &frames {
             release_org_queue_bytes(&self.org_queue_bytes, &frame.org_id, frame.queued_bytes);
         }
-        histogram!("ingest_export_batch_duration_seconds", "shard" => self.shard.to_string())
-            .record(start.elapsed().as_secs_f64());
-        histogram!(
-            "ingest_wal_exported_bytes",
-            "signal" => format!("{first_signal:?}"),
-            "shard" => first_shard.to_string()
-        )
-        .record(end.saturating_sub(first_offset) as f64);
+        metrics::export_batch_completed(
+            frames[0].shard,
+            &format!("{first_signal:?}"),
+            start.elapsed().as_secs_f64(),
+            end.saturating_sub(first_offset),
+        );
         Ok(())
     }
 
@@ -835,43 +820,36 @@ impl ExportWorker {
             let last_status: String;
             match response {
                 Ok(response) if response.status().is_success() => {
-                    histogram!("ingest_tinybird_export_duration_seconds", "datasource" => datasource.to_string(), "status" => "2xx")
-                        .record(started.elapsed().as_secs_f64());
-                    counter!("ingest_tinybird_export_rows_total", "datasource" => datasource.to_string())
-                        .increment(rows as u64);
+                    metrics::tinybird_export_succeeded(
+                        datasource,
+                        started.elapsed().as_secs_f64(),
+                        rows as u64,
+                    );
                     return Ok(());
                 }
                 Ok(response) if response.status().is_client_error() => {
                     let status = response.status().as_u16();
                     let body = response.text().await.unwrap_or_default();
-                    counter!("ingest_tinybird_export_dropped_total", "datasource" => datasource.to_string(), "status" => status.to_string())
-                        .increment(rows as u64);
+                    metrics::tinybird_export_dropped(datasource, &status.to_string(), rows as u64);
                     warn!(datasource, status, body = %body, rows, "Dropping non-retryable Tinybird batch");
                     return Ok(());
                 }
                 Ok(response) => {
                     let status = response.status().as_u16();
                     last_status = status.to_string();
-                    counter!("ingest_tinybird_export_retries_total", "datasource" => datasource.to_string(), "status" => last_status.clone())
-                        .increment(1);
+                    metrics::tinybird_export_retry(datasource, &last_status);
                     warn!(datasource, status, attempt, "Retrying Tinybird batch");
                 }
                 Err(error) => {
                     last_status = "transport".to_string();
-                    counter!("ingest_tinybird_export_retries_total", "datasource" => datasource.to_string(), "status" => last_status.clone())
-                        .increment(1);
+                    metrics::tinybird_export_retry(datasource, &last_status);
                     warn!(datasource, attempt, error = %error, "Retrying Tinybird batch after transport error");
                 }
             }
 
             attempt = attempt.saturating_add(1);
             if attempt >= max_attempts {
-                counter!(
-                    "ingest_tinybird_export_dropped_total",
-                    "datasource" => datasource.to_string(),
-                    "status" => "retries_exhausted",
-                )
-                .increment(rows as u64);
+                metrics::tinybird_export_dropped(datasource, "retries_exhausted", rows as u64);
                 error!(
                     datasource,
                     rows,
@@ -1274,7 +1252,7 @@ fn encode_metrics(
                         }
                     }
                     Some(metric::Data::Summary(_)) | None => {
-                        counter!("ingest_metrics_summary_dropped_total").increment(1);
+                        metrics::metrics_summary_dropped();
                     }
                 }
             }

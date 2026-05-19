@@ -18,13 +18,16 @@ opentelemetry = "0.31"
 opentelemetry_sdk = { version = "0.31", features = [
 	"rt-tokio",
 	"trace",
+	"metrics",
 	"experimental_trace_batch_span_processor_with_async_runtime",
+	"experimental_metrics_periodicreader_with_async_runtime",
 ] }
 opentelemetry-otlp = { version = "0.31", default-features = false, features = [
 	"http-proto",
 	"reqwest-client",
 	"reqwest-rustls",
 	"trace",
+	"metrics",
 ] }
 opentelemetry-proto = { version = "0.31.0", features = [
 	"gen-tonic",
@@ -49,8 +52,6 @@ tracing-subscriber = { version = "0.3.20", features = ["fmt", "env-filter"] }
 tower-http = { version = "0.6", features = ["cors"] }
 url = "2.5.7"
 uuid = { version = "1", features = ["v4"] }
-metrics = "0.24"
-metrics-exporter-prometheus = "0.16"
 moka = { version = "0.12", features = ["future"] }
 
 [dev-dependencies]
