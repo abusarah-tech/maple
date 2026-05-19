@@ -1,17 +1,26 @@
 import type { IconProps } from "./icon"
 
 const paths: ReadonlyArray<string> = [
-	"M19 21L9 21",
-	"M5 15H5.0001",
-	"M21 11L21 19",
-	"M7 11L7 19",
-	"M19 9L9 9",
-	"M17 5L17 7",
-	"M3 5L3 13",
-	"M15 3L5 3",
+	"M12 20V17",
+	"M8 2L16 2",
+	"M6 4L6 4.01",
+	"M18.01 4L18 4",
+	"M4 6L4 6.01",
+	"M20.01 6L20 6",
+	"M2 8L2 16",
+	"M22 8L22 16",
+	"M4.01001 18L4.00001 18",
+	"M20.01 18L20 18",
+	"M6.01001 20L6.00001 20",
+	"M18.01 20L18 20",
+	"M8 22L10 22",
+	"M10 11L10 8",
+	"M14 11L14 8",
+	"M10 17H14",
+	"M8 15V11H16V15",
 ]
 
-function CopyIcon({ size = 24, className, ...props }: IconProps) {
+function ConnectionIcon({ size = 24, className, ...props }: IconProps) {
 	return (
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
@@ -29,4 +38,4 @@ function CopyIcon({ size = 24, className, ...props }: IconProps) {
 		</svg>
 	)
 }
-export { CopyIcon }
+export { ConnectionIcon }

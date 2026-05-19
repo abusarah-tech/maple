@@ -1,19 +1,17 @@
 import type { IconProps } from "./icon"
 
 const paths: ReadonlyArray<string> = [
-	"M6 8H6.01",
-	"M10 8H10.01",
-	"M4 4H20",
-	"M4 20H20",
-	"M2 6V18",
-	"M22 6V18",
-	"M8.00001 14H8.01001",
-	"M10 12H10.01",
-	"M12 14H12.01",
-	"M14 16H14.01",
-	"M16 14H16.01",
-	"M18 12H18.01",
-	"M6.00001 16H6.01001",
+	"M2 15.01V15",
+	"M4 13.01V13",
+	"M6 11.01V11",
+	"M8 9.01V9",
+	"M10 11.01V11",
+	"M12 13.01V13",
+	"M14 15.01V15",
+	"M16 13.01V13",
+	"M18 11.01V11",
+	"M20 9.01V9",
+	"M22 7.01V7",
 ]
 
 function ChartLineIcon({ size = 24, className, ...props }: IconProps) {

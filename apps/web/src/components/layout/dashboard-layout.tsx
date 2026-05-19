@@ -15,6 +15,7 @@ import { PageLayout } from "@maple/ui/components/ui/page-layout"
 import { Button } from "@maple/ui/components/ui/button"
 import { useIsMobile } from "@maple/ui/hooks/use-mobile"
 import { LayoutLeftIcon } from "@/components/icons"
+import { ConnectButton } from "@/components/header/connect-button"
 import { Link, defaultParseSearch } from "@tanstack/react-router"
 
 export interface BreadcrumbItem {
@@ -115,18 +116,17 @@ export function DashboardLayout({
 								))}
 							</BreadcrumbList>
 						</Breadcrumb>
-						{(breadcrumbActions || (filterSidebar && isMobile)) && (
-							<div className="ml-auto flex shrink-0 items-center gap-2">
-								{filterSidebar && isMobile && (
-									<PageLayout.FilterSidebarTrigger>
-										<Button variant="outline" size="icon-sm" aria-label="Open filters">
-											<LayoutLeftIcon size={16} />
-										</Button>
-									</PageLayout.FilterSidebarTrigger>
-								)}
-								{breadcrumbActions}
-							</div>
-						)}
+						<div className="ml-auto flex shrink-0 items-center gap-2">
+							<ConnectButton />
+							{filterSidebar && isMobile && (
+								<PageLayout.FilterSidebarTrigger>
+									<Button variant="outline" size="icon-sm" aria-label="Open filters">
+										<LayoutLeftIcon size={16} />
+									</Button>
+								</PageLayout.FilterSidebarTrigger>
+							)}
+							{breadcrumbActions}
+						</div>
 					</header>
 					<PageLayout.Body>
 						{filterSidebar && (
