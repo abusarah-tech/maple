@@ -11,31 +11,32 @@
 //   bun run scripts/bench-queries.ts inspect  <file>    # EXPLAIN + PIPELINE
 //   bun run scripts/bench-queries.ts compare  <a> <b>   # diff two runs
 //
-// Built with Effect v4 to match the rest of the codebase: config via `Config`,
-// failures as `Schema.TaggedErrorClass`, HTTP/IO wrapped in `Context.Service`
-// clients, orchestration in `Effect.gen`/`Effect.fn`. Env (read via `Config`):
+// Built on Effect v4 end-to-end: `effect/unstable/cli` for the command tree
+// (help/version/usage come for free), `Config` for env, `Schema.TaggedErrorClass`
+// for failures, `Context.Service` HTTP clients, core `FileSystem` for IO, and
+// `@effect/platform-bun` for the runtime + CLI environment. Env (via `Config`):
 //   TINYBIRD_HOST, TINYBIRD_TOKEN          — source (where prod traces live)
 //   CLICKHOUSE_URL, CLICKHOUSE_USER,       — target (where we replay queries)
 //     CLICKHOUSE_PASSWORD, CLICKHOUSE_DATABASE
 //   MAPLE_INTERNAL_ORG_ID  (default: internal)
 // ---------------------------------------------------------------------------
 
-import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
 import { randomUUID } from "node:crypto"
 import {
-	Cause,
 	Config,
 	Console,
 	Context,
 	Duration,
 	Effect,
-	Exit,
+	FileSystem,
 	Layer,
 	Option,
 	Redacted,
 	Schema,
 } from "effect"
+import { Argument, Command, Flag } from "effect/unstable/cli"
+import { BunRuntime, BunServices } from "@effect/platform-bun"
 import { CH } from "@maple/query-engine"
 
 // ---------------------------------------------------------------------------
@@ -64,7 +65,8 @@ class BenchFileError extends Schema.TaggedErrorClass<BenchFileError>()("BenchFil
 	message: Schema.String,
 }) {}
 
-class ArgsError extends Schema.TaggedErrorClass<ArgsError>()("ArgsError", {
+class InvalidDurationError extends Schema.TaggedErrorClass<InvalidDurationError>()("InvalidDurationError", {
+	input: Schema.String,
 	message: Schema.String,
 }) {}
 
@@ -382,40 +384,41 @@ export class Tinybird extends Context.Service<Tinybird, TinybirdShape>()("bench/
 }
 
 // ---------------------------------------------------------------------------
-// File IO (wrapped in Effect)
+// File IO via the core FileSystem service
 // ---------------------------------------------------------------------------
 
 const readJsonFile = <T>(path: string) =>
-	Effect.tryPromise({
-		try: () => readFile(path, "utf-8"),
-		catch: (cause) => new BenchFileError({ path, op: "read", message: String(cause) }),
-	}).pipe(
-		Effect.flatMap((text) =>
-			Effect.try({
-				try: () => JSON.parse(text) as T,
-				catch: (cause) => new BenchFileError({ path, op: "parse", message: String(cause) }),
-			}),
-		),
-	)
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem
+		const text = yield* fs
+			.readFileString(path)
+			.pipe(Effect.mapError((cause) => new BenchFileError({ path, op: "read", message: String(cause) })))
+		return yield* Effect.try({
+			try: () => JSON.parse(text) as T,
+			catch: (cause) => new BenchFileError({ path, op: "parse", message: String(cause) }),
+		})
+	})
 
 const writeJsonFile = (path: string, value: unknown) =>
-	Effect.tryPromise({
-		try: async () => {
-			await mkdir(dirname(resolve(path)), { recursive: true })
-			await writeFile(path, JSON.stringify(value, null, 2))
-		},
-		catch: (cause) => new BenchFileError({ path, op: "write", message: String(cause) }),
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem
+		yield* fs
+			.makeDirectory(dirname(resolve(path)), { recursive: true })
+			.pipe(Effect.mapError((cause) => new BenchFileError({ path, op: "mkdir", message: String(cause) })))
+		yield* fs
+			.writeFileString(path, JSON.stringify(value, null, 2))
+			.pipe(Effect.mapError((cause) => new BenchFileError({ path, op: "write", message: String(cause) })))
 	})
 
 // ---------------------------------------------------------------------------
 // Pure helpers — time, formatting, stats, table
 // ---------------------------------------------------------------------------
 
-const parseRelativeDuration = (input: string): Effect.Effect<number, ArgsError> => {
+const parseRelativeDuration = (input: string): Effect.Effect<number, InvalidDurationError> => {
 	const match = /^(\d+)\s*(s|m|h|d)$/i.exec(input.trim())
 	if (!match) {
 		return Effect.fail(
-			new ArgsError({ message: `Invalid duration "${input}". Expected NNs / NNm / NNh / NNd (e.g. 24h, 7d).` }),
+			new InvalidDurationError({ input, message: `Expected NNs / NNm / NNh / NNd (e.g. 24h, 7d), got "${input}".` }),
 		)
 	}
 	const unit = { s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 }[match[2]!.toLowerCase()]!
@@ -485,7 +488,11 @@ interface Column {
 	readonly align?: "right"
 }
 
-const renderTable = (title: string, columns: ReadonlyArray<Column>, rows: ReadonlyArray<ReadonlyArray<string>>): string => {
+const renderTable = (
+	title: string,
+	columns: ReadonlyArray<Column>,
+	rows: ReadonlyArray<ReadonlyArray<string>>,
+): string => {
 	const pad = (value: string, col: Column) => {
 		const t = truncate(value, col.width)
 		return col.align === "right" ? t.padStart(col.width) : t.padEnd(col.width)
@@ -503,72 +510,45 @@ const renderTable = (title: string, columns: ReadonlyArray<Column>, rows: Readon
 	return lines.join("\n")
 }
 
-// ---------------------------------------------------------------------------
-// Args — tiny flag parser, errors surface through the Effect channel
-// ---------------------------------------------------------------------------
-
-interface FlagSpec {
-	readonly string?: ReadonlyArray<string>
-	readonly number?: ReadonlyArray<string>
-}
-
-const parseFlags = (
-	argv: ReadonlyArray<string>,
-	spec: FlagSpec,
-): Effect.Effect<Record<string, string | number | undefined>, ArgsError> =>
-	Effect.gen(function* () {
-		const result: Record<string, string | number | undefined> = {}
-		for (let i = 0; i < argv.length; i++) {
-			const arg = argv[i]!
-			if (!arg.startsWith("--")) continue
-			const key = arg.slice(2)
-			const value = argv[++i]
-			if (value === undefined) return yield* Effect.fail(new ArgsError({ message: `Flag --${key} requires a value.` }))
-			if (spec.number?.includes(key)) {
-				const n = Number(value)
-				if (Number.isNaN(n)) return yield* Effect.fail(new ArgsError({ message: `Flag --${key} expects a number, got "${value}".` }))
-				result[key] = n
-			} else if (spec.string?.includes(key)) {
-				result[key] = value
-			} else {
-				return yield* Effect.fail(new ArgsError({ message: `Unknown flag: --${key}` }))
-			}
-		}
-		return result
-	})
-
 const timestampSlug = () => new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)
 
 // ---------------------------------------------------------------------------
-// Subcommand: fetch
+// Handlers
 // ---------------------------------------------------------------------------
 
-const fetchCmd = Effect.fn("bench.fetch")(function* (args: ReadonlyArray<string>) {
-	const tinybird = yield* Tinybird
-	const flags = yield* parseFlags(args, {
-		string: ["context", "profile", "since", "out", "org"],
-		number: ["top"],
-	})
+interface FetchConfig {
+	readonly context: Option.Option<string>
+	readonly profile: Option.Option<string>
+	readonly since: string
+	readonly top: number
+	readonly out: Option.Option<string>
+	readonly org: Option.Option<string>
+}
 
-	const sinceMs = yield* parseRelativeDuration((flags.since as string) ?? "24h")
+const fetchHandler = Effect.fn("bench.fetch")(function* (config: FetchConfig) {
+	const tinybird = yield* Tinybird
+	const sinceMs = yield* parseRelativeDuration(config.since)
 	const now = new Date()
 	const startTime = formatCHDateTime(new Date(now.getTime() - sinceMs))
 	const endTime = formatCHDateTime(now)
-	const topN = (flags.top as number | undefined) ?? 20
-	const orgId = (flags.org as string | undefined) ?? (yield* tinybird.internalOrgId)
+	const topN = config.top
+	const orgId = yield* Option.match(config.org, {
+		onNone: () => tinybird.internalOrgId,
+		onSome: (o) => Effect.succeed(o),
+	})
 	const host = yield* tinybird.host
 
 	const compiled = CH.compile(
 		CH.dbStatementSamplesQuery({
-			contextFilter: flags.context as string | undefined,
-			profileFilter: flags.profile as string | undefined,
+			contextFilter: Option.getOrUndefined(config.context),
+			profileFilter: Option.getOrUndefined(config.profile),
 			limit: topN,
 		}),
 		{ orgId, startTime, endTime },
 	)
 
 	yield* Console.log(`Mining db.statement spans from ${host}`)
-	yield* Console.log(`  org: ${orgId}   window: ${startTime} → ${endTime} (${flags.since ?? "24h"})   top: ${topN}`)
+	yield* Console.log(`  org: ${orgId}   window: ${startTime} → ${endTime} (${config.since})   top: ${topN}`)
 
 	const rows = yield* tinybird.query(compiled.sql)
 	const samples = compiled.castRows(rows) as ReadonlyArray<Sample>
@@ -578,7 +558,7 @@ const fetchCmd = Effect.fn("bench.fetch")(function* (args: ReadonlyArray<string>
 		return
 	}
 
-	const outputPath = (flags.out as string | undefined) ?? `apps/api/scripts/.bench/queries-${timestampSlug()}.json`
+	const outputPath = Option.getOrElse(config.out, () => `apps/api/scripts/.bench/queries-${timestampSlug()}.json`)
 	const output: FetchOutput = {
 		fetchedAt: now.toISOString(),
 		source: host,
@@ -586,8 +566,8 @@ const fetchCmd = Effect.fn("bench.fetch")(function* (args: ReadonlyArray<string>
 			orgId,
 			startTime,
 			endTime,
-			contextFilter: flags.context as string | undefined,
-			profileFilter: flags.profile as string | undefined,
+			contextFilter: Option.getOrUndefined(config.context),
+			profileFilter: Option.getOrUndefined(config.profile),
 			topN,
 		},
 		samples,
@@ -620,11 +600,24 @@ const fetchCmd = Effect.fn("bench.fetch")(function* (args: ReadonlyArray<string>
 	yield* Console.log(`\nWrote ${outputPath}`)
 })
 
-// ---------------------------------------------------------------------------
-// Subcommand: run
-// ---------------------------------------------------------------------------
-
 const stripTrailingSemi = (sql: string) => sql.replace(/;\s*$/, "")
+
+const failedResult = (sample: Sample, message: string): SampleResult => ({
+	fingerprint: sample.fingerprint,
+	context: sample.context,
+	profile: sample.profile,
+	runs: [],
+	aggregates: {
+		p50WallMs: Number.NaN,
+		p95WallMs: Number.NaN,
+		p99WallMs: Number.NaN,
+		meanServerMs: null,
+		meanReadRows: null,
+		meanReadBytes: null,
+		meanMemoryUsage: null,
+	},
+	error: message,
+})
 
 const benchmarkSample = Effect.fn("bench.sample")(function* (
 	ch: ClickHouseShape,
@@ -653,9 +646,8 @@ const benchmarkSample = Effect.fn("bench.sample")(function* (
 				)
 			}
 			const log = yield* ch.queryLog(res.queryId)
-			const summary = res.summary
 			const fromSummary = (key: string) =>
-				Option.match(summary, {
+				Option.match(res.summary, {
 					onNone: () => null,
 					onSome: (s) => (s[key] !== undefined ? Number(s[key]) : null),
 				})
@@ -706,39 +698,21 @@ const benchmarkSample = Effect.fn("bench.sample")(function* (
 	return result
 })
 
-const failedResult = (sample: Sample, message: string): SampleResult => ({
-	fingerprint: sample.fingerprint,
-	context: sample.context,
-	profile: sample.profile,
-	runs: [],
-	aggregates: {
-		p50WallMs: Number.NaN,
-		p95WallMs: Number.NaN,
-		p99WallMs: Number.NaN,
-		meanServerMs: null,
-		meanReadRows: null,
-		meanReadBytes: null,
-		meanMemoryUsage: null,
-	},
-	error: message,
-})
+interface RunConfig {
+	readonly file: string
+	readonly runs: number
+	readonly warmup: number
+	readonly out: Option.Option<string>
+}
 
-const runCmd = Effect.fn("bench.run")(function* (args: ReadonlyArray<string>) {
+const runHandler = Effect.fn("bench.run")(function* (config: RunConfig) {
 	const ch = yield* ClickHouse
-	const [filePath, ...rest] = args
-	if (!filePath) {
-		return yield* Effect.fail(
-			new ArgsError({ message: "Usage: bench-queries.ts run <file> [--runs N] [--warmup N] [--out path]" }),
-		)
-	}
-	const flags = yield* parseFlags(rest, { string: ["out"], number: ["runs", "warmup"] })
-	const runsPerQuery = (flags.runs as number | undefined) ?? 5
-	const warmupRuns = (flags.warmup as number | undefined) ?? 1
-
-	const fetchOutput = yield* readJsonFile<FetchOutput>(filePath)
+	const runsPerQuery = config.runs
+	const warmupRuns = config.warmup
+	const fetchOutput = yield* readJsonFile<FetchOutput>(config.file)
 
 	yield* Console.log(`Replaying ${fetchOutput.samples.length} queries (${runsPerQuery} runs each, warmup ${warmupRuns})`)
-	yield* Console.log(`  source: ${filePath}\n`)
+	yield* Console.log(`  source: ${config.file}\n`)
 
 	// Sequential on purpose: concurrent replays would distort per-query timings.
 	const results = yield* Effect.forEach(fetchOutput.samples, (sample) =>
@@ -770,11 +744,11 @@ const runCmd = Effect.fn("bench.run")(function* (args: ReadonlyArray<string>) {
 			),
 	)
 
-	const outputPath = (flags.out as string | undefined) ?? `apps/api/scripts/.bench/results-${timestampSlug()}.json`
+	const outputPath = Option.getOrElse(config.out, () => `apps/api/scripts/.bench/results-${timestampSlug()}.json`)
 	const runOutput: RunOutput = {
 		ranAt: new Date().toISOString(),
 		target: fetchOutput.source,
-		sourceFile: filePath,
+		sourceFile: config.file,
 		runsPerQuery,
 		warmupRuns,
 		results,
@@ -783,19 +757,12 @@ const runCmd = Effect.fn("bench.run")(function* (args: ReadonlyArray<string>) {
 	yield* Console.log(`\nWrote ${outputPath}`)
 })
 
-// ---------------------------------------------------------------------------
-// Subcommand: inspect
-// ---------------------------------------------------------------------------
-
 const stripFormatClause = (sql: string) =>
 	sql.replace(/\s+FORMAT\s+\w+\s*;?\s*$/i, "").replace(/;\s*$/, "")
 
-const inspectCmd = Effect.fn("bench.inspect")(function* (args: ReadonlyArray<string>) {
+const inspectHandler = Effect.fn("bench.inspect")(function* (config: { readonly file: string }) {
 	const ch = yield* ClickHouse
-	const [filePath] = args
-	if (!filePath) return yield* Effect.fail(new ArgsError({ message: "Usage: bench-queries.ts inspect <file>" }))
-
-	const fetchOutput = yield* readJsonFile<FetchOutput>(filePath)
+	const fetchOutput = yield* readJsonFile<FetchOutput>(config.file)
 
 	yield* Effect.forEach(fetchOutput.samples, (sample) =>
 		Effect.gen(function* () {
@@ -822,17 +789,12 @@ const inspectCmd = Effect.fn("bench.inspect")(function* (args: ReadonlyArray<str
 	)
 })
 
-// ---------------------------------------------------------------------------
-// Subcommand: compare
-// ---------------------------------------------------------------------------
-
-const compareCmd = Effect.fn("bench.compare")(function* (args: ReadonlyArray<string>) {
-	const [aPath, bPath] = args
-	if (!aPath || !bPath) {
-		return yield* Effect.fail(new ArgsError({ message: "Usage: bench-queries.ts compare <a.json> <b.json>" }))
-	}
-	const a = yield* readJsonFile<RunOutput>(aPath)
-	const b = yield* readJsonFile<RunOutput>(bPath)
+const compareHandler = Effect.fn("bench.compare")(function* (config: {
+	readonly baseline: string
+	readonly candidate: string
+}) {
+	const a = yield* readJsonFile<RunOutput>(config.baseline)
+	const b = yield* readJsonFile<RunOutput>(config.candidate)
 	const bByFp = new Map(b.results.map((r) => [r.fingerprint, r]))
 
 	const rows = a.results.map((aResult) => {
@@ -853,7 +815,7 @@ const compareCmd = Effect.fn("bench.compare")(function* (args: ReadonlyArray<str
 
 	yield* Console.log(
 		renderTable(
-			`Compare: ${aPath} → ${bPath}`,
+			`Compare: ${config.baseline} → ${config.candidate}`,
 			[
 				{ header: "context", width: 22 },
 				{ header: "fingerprint", width: 14 },
@@ -869,47 +831,57 @@ const compareCmd = Effect.fn("bench.compare")(function* (args: ReadonlyArray<str
 })
 
 // ---------------------------------------------------------------------------
-// Entrypoint
+// CLI command tree (effect/unstable/cli)
 // ---------------------------------------------------------------------------
 
-const HELP = `bench-queries — measure ClickHouse query performance
+const fetchCommand = Command.make(
+	"fetch",
+	{
+		context: Flag.string("context").pipe(Flag.withDescription("Filter by query.context label"), Flag.optional),
+		profile: Flag.string("profile").pipe(Flag.withDescription("Filter by query.profile"), Flag.optional),
+		since: Flag.string("since").pipe(Flag.withDescription("Look-back window, e.g. 24h or 7d"), Flag.withDefault("24h")),
+		top: Flag.integer("top").pipe(Flag.withDescription("Number of fingerprints to keep"), Flag.withDefault(20)),
+		out: Flag.string("out").pipe(Flag.withDescription("Output JSON path"), Flag.optional),
+		org: Flag.string("org").pipe(Flag.withDescription("Source org (default: internal)"), Flag.optional),
+	},
+	fetchHandler,
+).pipe(Command.withDescription("Mine recent db.statement spans from production traces into a JSON file"))
 
-Usage:
-  bench-queries fetch    [--context name] [--profile name] [--since 24h]
-                         [--top 20] [--out path] [--org id]
-  bench-queries run      <file> [--runs 5] [--warmup 1] [--out path]
-  bench-queries inspect  <file>
-  bench-queries compare  <a.json> <b.json>
+const runCommand = Command.make(
+	"run",
+	{
+		file: Argument.string("file").pipe(Argument.withDescription("Queries JSON produced by `fetch`")),
+		runs: Flag.integer("runs").pipe(Flag.withDescription("Timed runs per query"), Flag.withDefault(5)),
+		warmup: Flag.integer("warmup").pipe(Flag.withDescription("Warmup runs before timing"), Flag.withDefault(1)),
+		out: Flag.string("out").pipe(Flag.withDescription("Results JSON path"), Flag.optional),
+	},
+	runHandler,
+).pipe(Command.withDescription("Replay each query and report wall-time + server-side stats"))
 
-Env (resolved via Config): TINYBIRD_HOST, TINYBIRD_TOKEN (fetch);
-  CLICKHOUSE_URL, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD, CLICKHOUSE_DATABASE (run, inspect).
-`
+const inspectCommand = Command.make(
+	"inspect",
+	{ file: Argument.string("file").pipe(Argument.withDescription("Queries JSON produced by `fetch`")) },
+	inspectHandler,
+).pipe(Command.withDescription("Print EXPLAIN and EXPLAIN PIPELINE for each query"))
+
+const compareCommand = Command.make(
+	"compare",
+	{
+		baseline: Argument.string("baseline").pipe(Argument.withDescription("Baseline results JSON")),
+		candidate: Argument.string("candidate").pipe(Argument.withDescription("Candidate results JSON")),
+	},
+	compareHandler,
+).pipe(Command.withDescription("Diff two run outputs (p95 wall, read bytes, memory)"))
+
+const rootCommand = Command.make("bench-queries").pipe(
+	Command.withDescription("Measure ClickHouse query performance"),
+	Command.withSubcommands([fetchCommand, runCommand, inspectCommand, compareCommand]),
+)
 
 const BenchLive = Layer.mergeAll(ClickHouse.layer, Tinybird.layer)
 
-const main = Effect.gen(function* () {
-	const [subcommand, ...rest] = process.argv.slice(2)
-	switch (subcommand) {
-		case undefined:
-		case "--help":
-		case "-h":
-			return yield* Console.log(HELP)
-		case "fetch":
-			return yield* fetchCmd(rest)
-		case "run":
-			return yield* runCmd(rest)
-		case "inspect":
-			return yield* inspectCmd(rest)
-		case "compare":
-			return yield* compareCmd(rest)
-		default:
-			return yield* Effect.fail(new ArgsError({ message: `Unknown subcommand "${subcommand}".\n\n${HELP}` }))
-	}
-}).pipe(Effect.provide(BenchLive))
-
-Effect.runPromiseExit(main).then((exit) => {
-	if (Exit.isFailure(exit)) {
-		console.error(Cause.pretty(exit.cause))
-		process.exit(1)
-	}
-})
+Command.run(rootCommand, { version: "0.1.0" }).pipe(
+	Effect.provide(BenchLive),
+	Effect.provide(BunServices.layer),
+	BunRuntime.runMain,
+)

@@ -28,12 +28,21 @@ Output JSONs land in `apps/api/scripts/.bench/` by default (gitignored).
 
 ## Implementation
 
-Built with Effect v4 (matching the rest of the repo): env resolved via
-`Config`, failures modeled as `Schema.TaggedErrorClass` (`MissingConfigError`,
-`HttpRequestError`, `UpstreamStatusError`, `BenchFileError`, `ArgsError`), and
-the ClickHouse + Tinybird HTTP clients are `Context.Service`s wired through a
-`Layer`. Each subcommand is an `Effect.fn` so its span name shows up in traces.
-The entrypoint runs via `Effect.runPromiseExit` and exits non-zero on failure.
+Built on Effect v4 end-to-end:
+
+- **CLI** — `effect/unstable/cli` (`Command` / `Flag` / `Argument`). The command
+  tree gives `--help`, per-subcommand help, `--version`, shell `--completions`,
+  and arg validation for free; no hand-rolled parser.
+- **Runtime** — `@effect/platform-bun` `BunRuntime.runMain` with
+  `BunServices.layer` providing the CLI `Environment` (FileSystem, Path,
+  Terminal, Stdio). Exits non-zero on failure with structured error logging.
+- **Config** — env resolved via `Config` (`CLICKHOUSE_*`, `TINYBIRD_*`).
+- **Errors** — `Schema.TaggedErrorClass`: `MissingConfigError`,
+  `HttpRequestError`, `UpstreamStatusError`, `BenchFileError`,
+  `InvalidDurationError`.
+- **Services** — ClickHouse + Tinybird HTTP clients as `Context.Service`s wired
+  through a `Layer`; file IO via the core `FileSystem` service. Each subcommand
+  handler is an `Effect.fn` so its span name shows up in traces.
 
 ## Env
 
