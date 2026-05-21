@@ -310,6 +310,13 @@ export {
 	type ListRuleChecksOutput,
 } from "./queries/alert-checks"
 
+// Queries — Internal observability (Maple's own self-instrumentation)
+export {
+	dbStatementSamplesQuery,
+	type DbStatementSamplesOpts,
+	type DbStatementSamplesOutput,
+} from "./queries/internal"
+
 // Queries — Infrastructure (host-centric aggregations over hostmetrics)
 export {
 	listHostsQuery,

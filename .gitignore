@@ -22,6 +22,7 @@ count.txt
 .turbo
 todos.json
 apps/api/.data/
+apps/api/scripts/.bench/
 
 .alchemy
 .mcp.json
