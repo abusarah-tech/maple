@@ -35,13 +35,60 @@ bun run db:studio
 
 ## API Runtime Behavior
 
-`@maple/api` runs `db:migrate` automatically before `dev` and `start` so pending migrations are applied at startup.
+`@maple/api` applies migrations on startup from its database layer (`runMigrations()` in
+`packages/db/src/migrate.ts` for the libSQL path; data migrations re-run on each Cloudflare
+D1 worker boot from `apps/api/src/services/DatabaseD1Live.ts`). There is no separate
+`db:migrate` step before `dev`/`start`.
+
+## Two Migration Runners (read before authoring a migration)
+
+DDL migrations in `packages/db/drizzle/` are applied by **two different runners that decide
+what to run differently** — they must be kept in agreement:
+
+- **libSQL** (local dev, Turso, self-host) — `drizzle-orm/libsql/migrator` reads
+  `meta/_journal.json`, runs each entry whose `when` timestamp is greater than the newest
+  `created_at` already in `__drizzle_migrations`. **A `.sql` file that is not in the journal
+  is never applied here.**
+- **Cloudflare D1** (prod/staging) — alchemy's `migrationsDir` enumerates `**/*.sql` by
+  **directory listing** (sorted by numeric prefix), tracks applied files by **filename** in
+  `drizzle_migrations`, and ignores `_journal.json` entirely. It is **not** idempotent — a
+  duplicate `CREATE TABLE` will fail.
+
+Consequence: a `.sql` file present on disk but missing from `_journal.json` ships to D1/prod
+but silently never reaches libSQL/self-host. This exact drift happened with
+`0011_org_ingest_sampling_policies.sql`.
+
+**To author a DDL migration:** add the `.sql` file under `packages/db/drizzle/` (drizzle
+backtick DDL style) **and** append a `meta/_journal.json` entry whose `idx` is sequential and
+whose `tag` matches the filename. Keep `idx`, the tag number, and the filename aligned. Then
+update the head snapshot (below) so `db:generate` stays clean.
+
+## Snapshot State (`meta/*_snapshot.json`)
+
+Snapshots feed `drizzle-kit generate` **only** (they have zero runtime effect; neither runner
+reads them). The head snapshot — `meta/{lastIdx}_snapshot.json` — must equal the live
+`schema/`, otherwise `generate` emits a bogus catch-up migration. The chain was re-baselined
+at `0014_snapshot.json` (== `schema/`); intermediate `0011–0013` snapshots are intentionally
+absent (`generate` only diffs against the head). After any schema change, run `db:generate`
+and confirm it reports "No schema changes" before/after as expected.
+
+> Caveat: some historical schema state was reached via boot-time data-migration DDL (the
+> `alert_rules` reshape in `0013-alert-query-signal-types`), which `drizzle-kit` cannot see.
+> The head snapshot, not the `.sql` history, is the source of truth for `generate`.
 
 ## Data Migrations (JSON-column rewrites)
 
-Drizzle migrations are pure DDL. When a stored JSON blob (e.g. `dashboards.payloadJson`,
-`dashboardVersions.snapshotJson`) needs a structural rewrite, a DDL migration cannot express
-it. Those run as TypeScript data-migration scripts in `packages/db/src/migrations/`.
+**Schema changes — including plain column adds/drops — are DDL and belong in a Drizzle
+migration `.sql` file under `packages/db/drizzle/` plus a matching `_journal.json` entry.**
+They are applied by `migrate()` on the libSQL path and by D1's `migrationsDir` on deploy.
+Do **not** express a DDL change as a boot-time data-migration script — that splits the work
+across two runners (`runMigrations()` and `DatabaseD1Live.ts`) that have to be kept in sync
+by hand, which has caused a column to ship to one path but not the other.
+
+The data-migration path below is reserved strictly for transforms a DDL migration *cannot*
+express — e.g. structurally rewriting a stored JSON blob (`dashboards.payloadJson`,
+`dashboardVersions.snapshotJson`). Those run as TypeScript scripts in
+`packages/db/src/migrations/`.
 
 - Each script is **idempotent** and guarded by the `_maple_data_migrations` bookkeeping
   table (`id`, `applied_at`) — it short-circuits if its id is already recorded.
@@ -49,7 +96,7 @@ it. Those run as TypeScript data-migration scripts in `packages/db/src/migration
   the DDL `migrate()`.
 - The Cloudflare D1 worker never calls `runMigrations()`, so each data migration is also
   invoked once on worker boot from `DatabaseD1Live.ts`; the guard table makes every later
-  boot a single `SELECT`.
+  boot a single `SELECT`. **Anything added here must be added to both runners.**
 
 See `packages/db/src/migrations/0012-dashboard-widget-reshape.ts` for the reference shape.
 
