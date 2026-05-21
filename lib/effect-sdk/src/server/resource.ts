@@ -19,8 +19,15 @@ const stringOrUndefined = (value: unknown): string | undefined =>
  * the specific replica that emitted them — required by maple-telemetry-
  * conventions to match the Rust ingest gateway, which also emits a fresh UUID
  * per process. `crypto.randomUUID` is available in Node ≥19 and on workerd.
+ *
+ * Generated lazily on first use rather than at module load: Cloudflare Workers
+ * disallow random generation (and other I/O) in global scope during script
+ * upload validation. The UUID is memoized so it stays stable for the isolate's
+ * lifetime — `resolveResource` runs inside a request handler, so the first call
+ * stamps the ID and every subsequent resource reuses it.
  */
-const SERVICE_INSTANCE_ID = crypto.randomUUID()
+let serviceInstanceId: string | undefined
+const getServiceInstanceId = (): string => (serviceInstanceId ??= crypto.randomUUID())
 
 /**
  * Subset of `MapleConfig` consumed by `resolveResource` — declared inline so
@@ -90,7 +97,7 @@ export const resolveResource = (config: ResourceConfigInput): Effect.Effect<Reso
 		const attributes: Record<string, unknown> = {}
 		Object.assign(attributes, getAutoPlatformAttributes())
 		attributes["maple.sdk.type"] = config.sdkType ?? "server"
-		attributes["service.instance.id"] = SERVICE_INSTANCE_ID
+		attributes["service.instance.id"] = getServiceInstanceId()
 		if (environment) {
 			// Dual-emit: every Tinybird MV (`service_overview_spans_mv` et al.)
 			// pre-extracts the legacy `deployment.environment` key, but query
@@ -166,7 +173,7 @@ export const resolveResourceFromEnv = (
 	const attributes: Record<string, unknown> = {}
 	Object.assign(attributes, getAutoPlatformAttributes())
 	attributes["maple.sdk.type"] = config.sdkType ?? "server"
-	attributes["service.instance.id"] = SERVICE_INSTANCE_ID
+	attributes["service.instance.id"] = getServiceInstanceId()
 	if (environment) {
 		// See resolveResource — dual-emit both keys until MVs coalesce.
 		attributes["deployment.environment"] = environment
