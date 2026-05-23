@@ -134,6 +134,7 @@ export const ErrorEvents = table("error_events", {
 	FingerprintHash: T.uint64,
 	StatusMessage: T.string,
 	Duration: T.uint64,
+	ErrorLabel: T.string,
 })
 
 export const MetricsSum = table("metrics_sum", {

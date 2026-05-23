@@ -568,11 +568,59 @@ export const errorEventsMv = defineMaterializedView("error_events_mv", {
           ) AS _topFrames,
           if(length(_topFrames) > 0, _topFrames[1], '') AS _topFrame,
           arrayStringConcat(_topFrames, '\\n') AS _fpFrames,
-          if(
-            _fpFrames = '',
-            replaceRegexpAll(substring(StatusMessage, 1, 200), '[0-9a-fA-F]{8,}|[0-9]+', '#'),
-            ''
-          ) AS _msgFallback
+          -- JSON detection (only consulted when _fpFrames = '')
+          isValidJSON(StatusMessage) AS _isJson,
+          _isJson AND JSONType(StatusMessage) = 'Object' AS _isJsonObj,
+          -- General, KEY-NAME-AGNOSTIC canonical signature: iterate ALL top-level
+          -- keys, redact volatile tokens (long hex / numbers) in each raw value, then
+          -- sort by "key=value" so key order & whitespace don't matter. No assumption
+          -- about which keys exist — works for any producer's JSON shape. (Nested
+          -- objects are hashed as their raw substring; only top-level is canonicalized.)
+          arrayStringConcat(
+            arraySort(
+              arrayMap(
+                kv -> concat(kv.1, '=', replaceRegexpAll(kv.2, '[0-9a-fA-F]{8,}|[0-9]+', '#')),
+                JSONExtractKeysAndValuesRaw(StatusMessage)
+              )
+            ),
+            '|'
+          ) AS _jsonSig,
+          -- Fold into the existing fallback hash slot. Non-JSON path is unchanged.
+          multiIf(
+            _fpFrames != '', '',
+            _isJsonObj,      _jsonSig,
+            replaceRegexpAll(substring(StatusMessage, 1, 200), '[0-9a-fA-F]{8,}|[0-9]+', '#')
+          ) AS _msgFallback,
+          -- Display-only, best-effort human label (decoupled from the fingerprint:
+          -- many labels may map to one hash). The broad key list here is a DISPLAY
+          -- heuristic only; the fingerprint above makes no key-name assumption.
+          multiIf(
+            JSONExtractString(StatusMessage, 'title')   != '', JSONExtractString(StatusMessage, 'title'),
+            JSONExtractString(StatusMessage, 'message') != '', JSONExtractString(StatusMessage, 'message'),
+            JSONExtractString(StatusMessage, 'error')   != '', JSONExtractString(StatusMessage, 'error'),
+            JSONExtractString(StatusMessage, '_tag')    != '', JSONExtractString(StatusMessage, '_tag'),
+            JSONExtractString(StatusMessage, 'reason')  != '', JSONExtractString(StatusMessage, 'reason'),
+            JSONExtractString(StatusMessage, 'name')    != '', JSONExtractString(StatusMessage, 'name'),
+            JSONExtractString(StatusMessage, 'type')    != '', extract(JSONExtractString(StatusMessage, 'type'), '([^/]+)$'),
+            'JSON error'
+          ) AS _jsonLabel,
+          multiIf(
+            StatusMessage = '', 'Unknown Error',
+            position(StatusMessage, '{ readonly') = 1 OR position(StatusMessage, '└─') > 0,
+              if(
+                extract(StatusMessage, 'readonly (\\\\w+)') != '',
+                concat('Schema parse error: ', extract(StatusMessage, 'readonly (\\\\w+)')),
+                'Schema parse error'
+              ),
+            _isJsonObj OR position(StatusMessage, '[') = 1, _jsonLabel,
+            left(StatusMessage, multiIf(
+              position(StatusMessage, ': ')  > 3, toInt64(position(StatusMessage, ': '))  - 1,
+              position(StatusMessage, ' (')  > 3, toInt64(position(StatusMessage, ' (')) - 1,
+              position(StatusMessage, '\\n') > 3, toInt64(position(StatusMessage, '\\n')) - 1,
+              least(toInt64(length(StatusMessage)), 150)
+            ))
+          ) AS _statusLabel,
+          if(_exType != '', _exType, _statusLabel) AS _errorLabel
         SELECT
           OrgId,
           toDateTime(Timestamp) AS Timestamp,
@@ -587,7 +635,8 @@ export const errorEventsMv = defineMaterializedView("error_events_mv", {
           _topFrame AS TopFrame,
           cityHash64(OrgId, ServiceName, _exType, _fpFrames, _msgFallback) AS FingerprintHash,
           StatusMessage,
-          Duration
+          Duration,
+          _errorLabel AS ErrorLabel
         FROM traces
         WHERE StatusCode = 'Error'
       `,

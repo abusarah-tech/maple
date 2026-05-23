@@ -1,0 +1,1 @@
+ALTER TABLE `error_issues` ADD `error_label` text DEFAULT '' NOT NULL;

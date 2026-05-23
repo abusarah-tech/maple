@@ -101,7 +101,10 @@ export interface InspectTraceOutput {
 // --- Errors ---
 
 export interface ErrorSummary {
-	readonly errorType: string
+	/** Stable fingerprint hash (the error identity; pass to error_detail). */
+	readonly fingerprintHash: string
+	/** Human-readable display label derived at ingest. */
+	readonly label: string
 	readonly count: number
 	readonly affectedServicesCount: number
 	readonly lastSeen: string
@@ -189,7 +192,7 @@ export interface ServiceHealthOutput {
 		readonly p99Ms: number
 		readonly apdex: number
 	}
-	readonly topErrors: ReadonlyArray<{ errorType: string; count: number }>
+	readonly topErrors: ReadonlyArray<{ fingerprintHash: string; label: string; count: number }>
 	readonly recentTraces: ReadonlyArray<{
 		traceId: string
 		rootSpanName: string

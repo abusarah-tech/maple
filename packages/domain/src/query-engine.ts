@@ -75,7 +75,7 @@ export const ErrorsFilters = Schema.Struct({
 	rootOnly: Schema.optional(Schema.Boolean),
 	services: Schema.optional(Schema.Array(Schema.String)),
 	deploymentEnvs: Schema.optional(Schema.Array(Schema.String)),
-	errorTypes: Schema.optional(Schema.Array(Schema.String)),
+	fingerprintHashes: Schema.optional(Schema.Array(Schema.String)),
 })
 export type ErrorsFilters = Schema.Schema.Type<typeof ErrorsFilters>
 

@@ -248,7 +248,6 @@ export {
 
 // Queries — Errors
 export {
-	errorFingerprint,
 	errorsByTypeQuery,
 	errorsTimeseriesQuery,
 	spanHierarchyQuery,

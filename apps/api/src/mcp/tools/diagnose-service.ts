@@ -49,7 +49,9 @@ export function registerDiagnoseServiceTool(server: McpToolRegistrar) {
 			if (result.topErrors.length > 0) {
 				lines.push(``, `Top Errors:`)
 				for (const e of result.topErrors) {
-					lines.push(`  - ${truncate(e.errorType, 80)} (${formatNumber(e.count)}x)`)
+					lines.push(
+						`  - ${truncate(e.label, 80)} (${formatNumber(e.count)}x) [fingerprint ${e.fingerprintHash}]`,
+					)
 				}
 			} else {
 				lines.push(``, `No errors found for this service.`)

@@ -225,4 +225,79 @@ describe("error fingerprint normalization", () => {
 			expect(result.msgFallback.length).toBeLessThanOrEqual(200)
 		})
 	})
+
+	describe("JSON-object signature (key-name-agnostic)", () => {
+		const sig = (statusMessage: string) =>
+			computeFingerprintInputs({ exceptionType: "", exceptionStacktrace: "", statusMessage }).msgFallback
+
+		it("builds a sorted key=value signature over all top-level keys", () => {
+			expect(
+				sig('{"type":"https://e/rate-limit","title":"Rate limited","detail":"retry in 5s","status":429}'),
+			).toBe('detail="retry in #s"|status=#|title="Rate limited"|type="https://e/rate-limit"')
+		})
+
+		it("is insensitive to key order", () => {
+			expect(sig('{"title":"X","code":"E1"}')).toBe(sig('{"code":"E1","title":"X"}'))
+		})
+
+		it("is robust to volatile numeric/hex ids in values", () => {
+			expect(sig('{"detail":"retry user 12345 in 5s"}')).toBe(
+				sig('{"detail":"retry user 99 in 5s"}'),
+			)
+			expect(sig('{"id":"a1b2c3d4e5f6"}')).toBe(sig('{"id":"ffffffffffff"}'))
+		})
+
+		it("splits on differing static field wording (intended)", () => {
+			expect(sig('{"detail":"disk full"}')).not.toBe(sig('{"detail":"out of memory"}'))
+		})
+
+		it("forms a signature from whatever keys exist (no common key required)", () => {
+			expect(sig('{"foo":"bar"}')).toBe('foo="bar"')
+		})
+
+		it("falls back to plain redaction for arrays (not an object)", () => {
+			expect(sig("[1,2,3]")).toBe("[#,#,#]")
+		})
+
+		it("does not use the JSON signature when frames are present", () => {
+			expect(
+				computeFingerprintInputs({
+					exceptionType: "",
+					exceptionStacktrace: "    at f (/a.ts:10:5)",
+					statusMessage: '{"title":"Rate limited"}',
+				}).msgFallback,
+			).toBe("")
+		})
+	})
+
+	describe("value-aware label", () => {
+		const label = (statusMessage: string, exceptionType = "") =>
+			computeFingerprintInputs({ exceptionType, exceptionStacktrace: "", statusMessage }).label
+
+		it("prefers the exception type when present", () => {
+			expect(label('{"title":"Rate limited"}', "TimeoutError")).toBe("TimeoutError")
+		})
+
+		it("reads problem+json title", () => {
+			expect(label('{"type":"https://e/rate-limit","title":"Rate limited"}')).toBe("Rate limited")
+		})
+
+		it("falls back to _tag, then last path-segment of type, then 'JSON error'", () => {
+			expect(label('{"_tag":"NetworkError"}')).toBe("NetworkError")
+			expect(label('{"type":"https://api/errors/not_found"}')).toBe("not_found")
+			expect(label('{"foo":"bar"}')).toBe("JSON error")
+			expect(label("[1,2,3]")).toBe("JSON error")
+		})
+
+		it("labels Effect ParseError by first field", () => {
+			expect(label("{ readonly userId: string }")).toBe("Schema parse error: userId")
+			expect(label("Expected string\n└─ at index 0")).toBe("Schema parse error")
+		})
+
+		it("cuts legacy messages at the first delimiter (in order)", () => {
+			expect(label("TypeError: undefined is not a function")).toBe("TypeError")
+			expect(label("RouteNotFound (GET /robots.txt)")).toBe("RouteNotFound")
+			expect(label("")).toBe("Unknown Error")
+		})
+	})
 })

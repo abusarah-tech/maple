@@ -96,7 +96,10 @@ export function registerListErrorIssuesTool(server: McpToolRegistrar) {
 					i.hasOpenIncident ? `${i.workflowState} (incident)` : i.workflowState,
 					String(i.priority),
 					i.serviceName,
-					truncate(`${i.exceptionType}: ${i.exceptionMessage}`, 50),
+					truncate(
+						i.errorLabel || `${i.exceptionType}: ${i.exceptionMessage}`,
+						50,
+					),
 					formatNumber(i.occurrenceCount),
 					i.lastSeenAt.slice(0, 19),
 					i.assignedActor
@@ -136,6 +139,7 @@ export function registerListErrorIssuesTool(server: McpToolRegistrar) {
 							workflowState: i.workflowState,
 							priority: i.priority,
 							serviceName: i.serviceName,
+							errorLabel: i.errorLabel,
 							exceptionType: i.exceptionType,
 							exceptionMessage: i.exceptionMessage,
 							topFrame: i.topFrame,

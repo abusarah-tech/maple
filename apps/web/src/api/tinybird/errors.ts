@@ -18,7 +18,8 @@ import {
 const OptionalStringArray = Schema.optional(Schema.mutable(Schema.Array(Schema.String)))
 
 export interface ErrorByType {
-	errorType: string
+	fingerprintHash: string
+	errorLabel: string
 	sampleMessage: string
 	count: number
 	affectedServicesCount: number
@@ -35,7 +36,7 @@ const GetErrorsByTypeInputSchema = Schema.Struct({
 	endTime: Schema.optional(TinybirdDateTimeString),
 	services: OptionalStringArray,
 	deploymentEnvs: OptionalStringArray,
-	errorTypes: OptionalStringArray,
+	fingerprintHashes: OptionalStringArray,
 	limit: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
 	showSpam: Schema.optional(Schema.Boolean),
 	rootOnly: Schema.optional(Schema.Boolean),
@@ -65,7 +66,7 @@ const getErrorsByTypeEffect = Effect.fn("QueryEngine.getErrorsByType")(function*
 					rootOnly: input.rootOnly,
 					services: input.services,
 					deploymentEnvs: input.deploymentEnvs,
-					errorTypes: input.errorTypes,
+					fingerprintHashes: input.fingerprintHashes,
 					limit: input.limit,
 				}),
 			})
@@ -74,7 +75,8 @@ const getErrorsByTypeEffect = Effect.fn("QueryEngine.getErrorsByType")(function*
 
 	return {
 		data: result.data.map((raw) => ({
-			errorType: raw.errorType,
+			fingerprintHash: raw.fingerprintHash,
+			errorLabel: raw.errorLabel,
 			sampleMessage: raw.sampleMessage,
 			count: Number(raw.count),
 			affectedServicesCount: Number(raw.affectedServicesCount),
@@ -104,7 +106,7 @@ const GetErrorsFacetsInputSchema = Schema.Struct({
 	endTime: Schema.optional(TinybirdDateTimeString),
 	services: OptionalStringArray,
 	deploymentEnvs: OptionalStringArray,
-	errorTypes: OptionalStringArray,
+	fingerprintHashes: OptionalStringArray,
 	showSpam: Schema.optional(Schema.Boolean),
 	rootOnly: Schema.optional(Schema.Boolean),
 })
@@ -142,7 +144,7 @@ const getErrorsFacetsEffect = Effect.fn("QueryEngine.getErrorsFacets")(function*
 					rootOnly: input.rootOnly,
 					services: input.services,
 					deploymentEnvs: input.deploymentEnvs,
-					errorTypes: input.errorTypes,
+					fingerprintHashes: input.fingerprintHashes,
 				},
 			},
 		}),
@@ -190,7 +192,7 @@ const GetErrorsSummaryInputSchema = Schema.Struct({
 	endTime: Schema.optional(TinybirdDateTimeString),
 	services: OptionalStringArray,
 	deploymentEnvs: OptionalStringArray,
-	errorTypes: OptionalStringArray,
+	fingerprintHashes: OptionalStringArray,
 	showSpam: Schema.optional(Schema.Boolean),
 	rootOnly: Schema.optional(Schema.Boolean),
 })
@@ -219,7 +221,7 @@ const getErrorsSummaryEffect = Effect.fn("QueryEngine.getErrorsSummary")(functio
 					rootOnly: input.rootOnly,
 					services: input.services,
 					deploymentEnvs: input.deploymentEnvs,
-					errorTypes: input.errorTypes,
+					fingerprintHashes: input.fingerprintHashes,
 				}),
 			})
 		}),
@@ -254,7 +256,7 @@ export interface ErrorDetailTracesResponse {
 }
 
 const GetErrorDetailTracesInputSchema = Schema.Struct({
-	errorType: Schema.String,
+	fingerprintHash: Schema.String,
 	startTime: Schema.optional(TinybirdDateTimeString),
 	endTime: Schema.optional(TinybirdDateTimeString),
 	services: OptionalStringArray,
@@ -284,7 +286,7 @@ const getErrorDetailTracesEffect = Effect.fn("QueryEngine.getErrorDetailTraces")
 				payload: new ErrorDetailTracesRequest({
 					startTime: input.startTime ?? fallback.startTime,
 					endTime: input.endTime ?? fallback.endTime,
-					errorType: input.errorType,
+					fingerprintHash: input.fingerprintHash,
 					rootOnly: input.rootOnly,
 					services: input.services,
 					limit: input.limit,
@@ -312,7 +314,7 @@ export interface ErrorsTimeseriesItem {
 }
 
 const GetErrorsTimeseriesInputSchema = Schema.Struct({
-	errorType: Schema.String,
+	fingerprintHash: Schema.String,
 	startTime: Schema.optional(TinybirdDateTimeString),
 	endTime: Schema.optional(TinybirdDateTimeString),
 	services: OptionalStringArray,
@@ -341,7 +343,7 @@ const getErrorsTimeseriesEffect = Effect.fn("QueryEngine.getErrorsTimeseries")(f
 				payload: new ErrorsTimeseriesRequest({
 					startTime: input.startTime ?? fallback.startTime,
 					endTime: input.endTime ?? fallback.endTime,
-					errorType: input.errorType,
+					fingerprintHash: input.fingerprintHash,
 					services: input.services,
 					bucketSeconds: input.bucketSeconds,
 				}),

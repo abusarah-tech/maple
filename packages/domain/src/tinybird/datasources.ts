@@ -597,6 +597,7 @@ export const errorEvents = defineDatasource("error_events", {
 		FingerprintHash: t.uint64(),
 		StatusMessage: t.string(),
 		Duration: t.uint64(),
+		ErrorLabel: t.string(),
 	},
 	engine: engine.mergeTree({
 		partitionKey: "toDate(Timestamp)",

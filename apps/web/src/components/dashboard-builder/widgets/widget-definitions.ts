@@ -548,7 +548,7 @@ export const tablePresets: WidgetPresetDefinition[] = [
 		display: {
 			title: "Errors by Type",
 			columns: [
-				{ field: "errorType", header: "Error Type" },
+				{ field: "errorLabel", header: "Error" },
 				{ field: "count", header: "Count", unit: "number", align: "right" },
 				{ field: "affectedServicesCount", header: "Services", align: "right" },
 			],
@@ -567,7 +567,7 @@ export const tablePresets: WidgetPresetDefinition[] = [
 		display: {
 			title: "Root Errors by Type",
 			columns: [
-				{ field: "errorType", header: "Error Type" },
+				{ field: "errorLabel", header: "Error" },
 				{ field: "count", header: "Count", unit: "number", align: "right" },
 				{ field: "affectedServicesCount", header: "Services", align: "right" },
 			],

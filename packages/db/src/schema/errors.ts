@@ -56,6 +56,7 @@ export const errorIssues = sqliteTable(
 		serviceName: text("service_name").notNull(),
 		exceptionType: text("exception_type").notNull(),
 		exceptionMessage: text("exception_message").notNull(),
+		errorLabel: text("error_label").notNull().default(""),
 		topFrame: text("top_frame").notNull(),
 		workflowState: text("workflow_state").$type<WorkflowState>().notNull().default("triage"),
 		priority: integer("priority", { mode: "number" }).notNull().default(3),

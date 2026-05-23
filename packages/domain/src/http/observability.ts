@@ -139,7 +139,8 @@ const FindErrorsRequest = Schema.Struct({
 })
 
 const ErrorSummary = Schema.Struct({
-	errorType: Schema.String,
+	fingerprintHash: Schema.String,
+	label: Schema.String,
 	count: Schema.Number,
 	affectedServicesCount: Schema.Number,
 	lastSeen: Schema.String,
@@ -171,7 +172,8 @@ const DiagnoseServiceResponse = Schema.Struct({
 	}),
 	topErrors: Schema.Array(
 		Schema.Struct({
-			errorType: Schema.String,
+			fingerprintHash: Schema.String,
+			label: Schema.String,
 			count: Schema.Number,
 		}),
 	),

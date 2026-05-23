@@ -50,7 +50,7 @@ describe("compilePipeQuery", () => {
 					...baseParams(),
 					trace_id: "abc123",
 					service_name: "my-svc",
-					error_type: "TypeError",
+					fingerprint_hash: "12345",
 					attribute_key: "http.method",
 					bucket_seconds: 60,
 				})

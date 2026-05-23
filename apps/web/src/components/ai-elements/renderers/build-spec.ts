@@ -53,7 +53,7 @@ export function buildSpec(output: StructuredToolOutput): Spec {
 			const d = output.data
 			const root = addElement(elements, "ErrorList", {
 				errors: d.errors.map((e) => ({
-					errorType: e.errorType,
+					errorType: e.label,
 					count: e.count,
 					affectedServices: [],
 					lastSeen: e.lastSeen,
@@ -146,7 +146,7 @@ export function buildSpec(output: StructuredToolOutput): Spec {
 				children.push(
 					addElement(elements, "ErrorList", {
 						errors: (d.topErrors ?? []).map((e) => ({
-							errorType: e.errorType,
+							errorType: e.label,
 							count: e.count,
 							affectedServices: [d.serviceName],
 							lastSeen: d.timeRange.end,

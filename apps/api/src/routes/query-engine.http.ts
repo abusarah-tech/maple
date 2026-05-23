@@ -162,7 +162,7 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 							rootOnly: payload.rootOnly,
 							services: payload.services,
 							deploymentEnvs: payload.deploymentEnvs,
-							errorTypes: payload.errorTypes,
+							fingerprintHashes: payload.fingerprintHashes,
 							limit: payload.limit,
 						}),
 						{ orgId: tenant.orgId, startTime: payload.startTime, endTime: payload.endTime },
@@ -177,7 +177,8 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 					const typedRows = compiled.castRows(rows)
 					return new ErrorsByTypeResponse({
 						data: typedRows.map((row) => ({
-							errorType: row.errorType,
+							fingerprintHash: row.fingerprintHash,
+							errorLabel: row.errorLabel,
 							sampleMessage: row.sampleMessage,
 							count: Number(row.count),
 							affectedServicesCount: Number(row.affectedServicesCount),
@@ -192,7 +193,7 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 					const tenant = yield* CurrentTenant.Context
 					const compiled = CH.compile(
 						CH.errorsTimeseriesQuery({
-							errorType: payload.errorType,
+							fingerprintHash: payload.fingerprintHash,
 							services: payload.services,
 						}),
 						{
@@ -226,7 +227,7 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 							rootOnly: payload.rootOnly,
 							services: payload.services,
 							deploymentEnvs: payload.deploymentEnvs,
-							errorTypes: payload.errorTypes,
+							fingerprintHashes: payload.fingerprintHashes,
 						}),
 						{ orgId: tenant.orgId, startTime: payload.startTime, endTime: payload.endTime },
 					)
@@ -256,7 +257,7 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 					const tenant = yield* CurrentTenant.Context
 					const compiled = CH.compile(
 						CH.errorDetailTracesQuery({
-							errorType: payload.errorType,
+							fingerprintHash: payload.fingerprintHash,
 							rootOnly: payload.rootOnly,
 							services: payload.services,
 							limit: payload.limit,

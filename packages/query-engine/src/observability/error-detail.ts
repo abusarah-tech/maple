@@ -15,14 +15,14 @@ export interface ErrorDetailTrace {
 }
 
 export interface ErrorDetailOutput {
-	readonly errorType: string
+	readonly fingerprintHash: string
 	readonly timeRange: TimeRange
 	readonly traces: ReadonlyArray<ErrorDetailTrace>
 	readonly timeseries?: ReadonlyArray<{ bucket: string; count: number }>
 }
 
 export const errorDetail = Effect.fn("Observability.errorDetail")(function* (input: {
-	readonly errorType: string
+	readonly fingerprintHash: string
 	readonly timeRange: TimeRange
 	readonly service?: string
 	readonly includeTimeseries?: boolean
@@ -32,14 +32,14 @@ export const errorDetail = Effect.fn("Observability.errorDetail")(function* (inp
 	const limit = input.limit ?? 5
 
 	yield* Effect.annotateCurrentSpan({
-		errorType: input.errorType,
+		fingerprintHash: input.fingerprintHash,
 		service: input.service ?? "all",
 	})
 
 	const tracesResult = yield* executor.query<ErrorDetailTracesOutput>(
 		"error_detail_traces",
 		{
-			error_type: input.errorType,
+			fingerprint_hash: input.fingerprintHash,
 			start_time: input.timeRange.startTime,
 			end_time: input.timeRange.endTime,
 			...(input.service && { services: input.service }),
@@ -72,7 +72,7 @@ export const errorDetail = Effect.fn("Observability.errorDetail")(function* (inp
 				.query<ErrorsTimeseriesOutput>(
 					"errors_timeseries",
 					{
-						error_type: input.errorType,
+						fingerprint_hash: input.fingerprintHash,
 						start_time: input.timeRange.startTime,
 						end_time: input.timeRange.endTime,
 						...(input.service && { services: input.service }),
@@ -90,7 +90,7 @@ export const errorDetail = Effect.fn("Observability.errorDetail")(function* (inp
 		: undefined
 
 	return {
-		errorType: input.errorType,
+		fingerprintHash: input.fingerprintHash,
 		timeRange: input.timeRange,
 		traces: pipe(
 			traces,

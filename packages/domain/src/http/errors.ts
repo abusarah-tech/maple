@@ -97,6 +97,7 @@ export class ErrorIssueDocument extends Schema.Class<ErrorIssueDocument>("ErrorI
 	serviceName: Schema.String,
 	exceptionType: Schema.String,
 	exceptionMessage: Schema.String,
+	errorLabel: Schema.String,
 	topFrame: Schema.String,
 	workflowState: WorkflowState,
 	priority: Schema.Number,

@@ -11,7 +11,7 @@ import { makeTinybirdExecutorFromTenant } from "@/services/TinybirdExecutorLive"
 export function registerFindErrorsTool(server: McpToolRegistrar) {
 	server.tool(
 		"find_errors",
-		"Find and categorize errors by type with counts and affected services. Use error_detail to see sample traces for a specific error type.",
+		"Find and categorize errors by type with counts and affected services. Each error has a stable `fingerprint` id — pass it to error_detail for sample traces, or to the error-issue tools (same identity as list_error_issues).",
 		Schema.Struct({
 			start_time: optionalStringParam("Start of time range (YYYY-MM-DD HH:mm:ss)"),
 			end_time: optionalStringParam("End of time range (YYYY-MM-DD HH:mm:ss)"),
@@ -43,9 +43,10 @@ export function registerFindErrorsTool(server: McpToolRegistrar) {
 
 			const lines: string[] = [`## Errors by Type`, ``]
 
-			const headers = ["Error Type", "Count", "Affected Services", "Last Seen"]
+			const headers = ["Error", "Fingerprint", "Count", "Affected Services", "Last Seen"]
 			const rows = Arr.map(errors, (e) => [
-				e.errorType.length > 60 ? e.errorType.slice(0, 57) + "..." : e.errorType,
+				e.label.length > 60 ? e.label.slice(0, 57) + "..." : e.label,
+				e.fingerprintHash,
 				formatNumber(e.count),
 				String(e.affectedServicesCount),
 				e.lastSeen,
@@ -56,8 +57,9 @@ export function registerFindErrorsTool(server: McpToolRegistrar) {
 
 			const nextSteps: string[] = []
 			for (const e of Arr.take(errors, 3)) {
-				const short = e.errorType.length > 50 ? e.errorType.slice(0, 47) + "..." : e.errorType
-				nextSteps.push(`\`error_detail error_type="${short}"\` — see sample traces and logs`)
+				nextSteps.push(
+					`\`error_detail fingerprint="${e.fingerprintHash}"\` — see sample traces and logs for "${e.label}"`,
+				)
 			}
 			nextSteps.push(
 				'`query_data source="traces" kind="timeseries" metric="error_rate"` — chart error rate trend',
@@ -70,7 +72,8 @@ export function registerFindErrorsTool(server: McpToolRegistrar) {
 					data: {
 						timeRange: { start: st, end: et },
 						errors: Arr.map(errors, (e) => ({
-							errorType: e.errorType,
+							fingerprintHash: e.fingerprintHash,
+							label: e.label,
 							count: e.count,
 							affectedServicesCount: e.affectedServicesCount,
 							lastSeen: e.lastSeen,

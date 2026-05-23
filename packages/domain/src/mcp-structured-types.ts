@@ -13,7 +13,8 @@ export interface SystemHealthData {
 	affectedTracesCount: number
 	latency: { p50Ms: number; p95Ms: number }
 	topErrors: Array<{
-		errorType: string
+		fingerprintHash: string
+		label: string
 		count: number
 		affectedServicesCount: number
 	}>
@@ -71,7 +72,8 @@ export interface FindSlowTracesData {
 }
 
 export interface ErrorTypeRow {
-	errorType: string
+	fingerprintHash: string
+	label: string
 	count: number
 	affectedServicesCount: number
 	lastSeen: string
@@ -99,7 +101,7 @@ export interface ErrorDetailTrace {
 
 export interface ErrorDetailData {
 	timeRange: { start: string; end: string }
-	errorType: string
+	fingerprintHash: string
 	traces: ErrorDetailTrace[]
 }
 
@@ -181,7 +183,8 @@ export interface DiagnoseServiceData {
 		apdex: number
 	}
 	topErrors: Array<{
-		errorType: string
+		fingerprintHash: string
+		label: string
 		count: number
 	}>
 	recentTraces: TraceRow[]

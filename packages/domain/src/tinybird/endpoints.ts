@@ -400,7 +400,8 @@ export interface ServiceReleasesTimelineParams {
 // ---------------------------------------------------------------------------
 
 export interface ErrorsByTypeOutput {
-	readonly errorType: string
+	readonly fingerprintHash: string
+	readonly errorLabel: string
 	readonly sampleMessage: string
 	readonly count: number
 	readonly affectedServicesCount: number
@@ -414,7 +415,7 @@ export interface ErrorsByTypeParams {
 	end_time?: string
 	services?: string
 	deployment_envs?: string
-	error_types?: string
+	fingerprint_hashes?: string
 	limit?: number
 	exclude_spam_patterns?: string
 	root_only?: boolean
@@ -431,7 +432,7 @@ export interface ErrorsTimeseriesOutput {
 
 export interface ErrorsTimeseriesParams {
 	org_id: string
-	error_type: string
+	fingerprint_hash: string
 	start_time?: string
 	end_time?: string
 	bucket_seconds?: number
@@ -455,7 +456,7 @@ export interface ErrorDetailTracesOutput {
 
 export interface ErrorDetailTracesParams {
 	org_id: string
-	error_type: string
+	fingerprint_hash: string
 	start_time?: string
 	end_time?: string
 	services?: string
@@ -480,7 +481,7 @@ export interface ErrorsFacetsParams {
 	end_time?: string
 	services?: string
 	deployment_envs?: string
-	error_types?: string
+	fingerprint_hashes?: string
 	exclude_spam_patterns?: string
 	root_only?: boolean
 }
@@ -503,7 +504,7 @@ export interface ErrorsSummaryParams {
 	end_time?: string
 	services?: string
 	deployment_envs?: string
-	error_types?: string
+	fingerprint_hashes?: string
 	exclude_spam_patterns?: string
 	root_only?: boolean
 }

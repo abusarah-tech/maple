@@ -44,7 +44,7 @@ function ErrorDetailPanel({ errorRow, filters }: { errorRow: ErrorByType; filter
 	const detailResult = useRefreshableAtomValue(
 		getErrorDetailTracesResultAtom({
 			data: {
-				errorType: errorRow.errorType,
+				fingerprintHash: errorRow.fingerprintHash,
 				startTime: filters.startTime,
 				endTime: filters.endTime,
 				services: filters.services,
@@ -166,7 +166,8 @@ function ErrorDetailPanel({ errorRow, filters }: { errorRow: ErrorByType; filter
 			<div className="pt-1">
 				<Link
 					to="/errors/$errorType"
-					params={{ errorType: encodeURIComponent(errorRow.errorType) }}
+					params={{ errorType: encodeURIComponent(errorRow.fingerprintHash) }}
+					search={{ label: errorRow.errorLabel }}
 					className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
 				>
 					View full details
@@ -259,18 +260,18 @@ export function ErrorsByTypeTable({ filters }: ErrorsByTypeTableProps) {
 									</TableRow>
 								) : (
 									errors.map((errorRow: ErrorByType) => {
-										const isExpanded = expandedError === errorRow.errorType
+										const isExpanded = expandedError === errorRow.fingerprintHash
 										return (
-											<Fragment key={errorRow.errorType}>
+											<Fragment key={errorRow.fingerprintHash}>
 												<TableRow
 													className="cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset"
 													tabIndex={0}
 													aria-expanded={isExpanded}
-													onClick={() => toggleExpanded(errorRow.errorType)}
+													onClick={() => toggleExpanded(errorRow.fingerprintHash)}
 													onKeyDown={(e) => {
 														if (e.key === "Enter" || e.key === " ") {
 															e.preventDefault()
-															toggleExpanded(errorRow.errorType)
+															toggleExpanded(errorRow.fingerprintHash)
 														}
 													}}
 												>
@@ -289,7 +290,7 @@ export function ErrorsByTypeTable({ filters }: ErrorsByTypeTableProps) {
 													</TableCell>
 													<TableCell>
 														<span className="font-medium text-primary block">
-															{truncateErrorType(errorRow.errorType)}
+															{truncateErrorType(errorRow.errorLabel)}
 														</span>
 													</TableCell>
 													<TableCell>

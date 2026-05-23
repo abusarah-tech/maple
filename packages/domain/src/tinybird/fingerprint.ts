@@ -17,12 +17,20 @@ export interface FingerprintInputs {
 	/** Top 3 normalized frames joined by newline — the stack portion of the hash. */
 	readonly fpFrames: string
 	/**
-	 * Normalized StatusMessage prefix, folded into the hash whenever there are no
+	 * Normalized StatusMessage, folded into the hash whenever there are no
 	 * frame-shaped stack lines (regardless of whether ExceptionType is present).
-	 * Prevents status-only errors — and errors with generic or malformed
-	 * ExceptionType values — from all collapsing into a single issue per service.
+	 * For a JSON object this is a general, key-name-agnostic canonical signature
+	 * (sorted `key=redactedValue` pairs over ALL top-level keys); otherwise the
+	 * redacted message prefix. Prevents status-only errors — and errors with
+	 * generic or malformed ExceptionType values — from collapsing into one issue.
 	 */
 	readonly msgFallback: string
+	/**
+	 * Value-aware human display label (mirrors the `ErrorLabel` column). Display
+	 * only and decoupled from the fingerprint — many labels may map to one hash,
+	 * so the key heuristic here never affects bucketing.
+	 */
+	readonly label: string
 }
 
 // Matches frame-shaped lines across common runtimes:
@@ -31,6 +39,77 @@ export interface FingerprintInputs {
 const FRAME_LINE_RE = /:\d+|line \d+/
 const LINE_NUM_OR_HEX_RE = /:\d+|line \d+|0x[0-9a-fA-F]+/g
 const MSG_REDACT_RE = /[0-9a-fA-F]{8,}|[0-9]+/g
+
+// Display-only candidate keys for the human label (NOT used by the fingerprint).
+const LABEL_KEYS = ["title", "message", "error", "_tag", "reason", "name"] as const
+
+/**
+ * Parse a JSON object, or return undefined for non-objects (arrays, scalars,
+ * malformed). Mirrors the SQL gate `isValidJSON(msg) AND JSONType(msg)='Object'`.
+ *
+ * Parity caveat: JS `JSON.parse` is stricter than ClickHouse `isValidJSON`;
+ * acceptable for the well-formed RFC7807 / serialized-error messages we see.
+ */
+function tryParseJsonObject(s: string): Record<string, unknown> | undefined {
+	try {
+		const v = JSON.parse(s) as unknown
+		return v !== null && typeof v === "object" && !Array.isArray(v)
+			? (v as Record<string, unknown>)
+			: undefined
+	} catch {
+		return undefined
+	}
+}
+
+/**
+ * General, key-name-agnostic canonical signature: for every top-level key, emit
+ * `key=redactedRawValue`, then sort and join. Mirrors the SQL
+ * `arrayStringConcat(arraySort(arrayMap(... JSONExtractKeysAndValuesRaw ...)), '|')`.
+ * `JSON.stringify(value)` reproduces the raw token (strings quoted, numbers bare),
+ * matching `JSONExtractKeysAndValuesRaw` for scalars. Nested objects/arrays are
+ * hashed as their (compact) raw form — only top-level order is canonicalized.
+ */
+function jsonSignature(obj: Record<string, unknown>): string {
+	return Object.keys(obj)
+		.map((key) => `${key}=${JSON.stringify(obj[key]).replace(MSG_REDACT_RE, "#")}`)
+		.sort()
+		.join("|")
+}
+
+/** Mirrors the `_statusLabel` SQL multiIf (display-only). */
+function statusLabel(statusMessage: string): string {
+	if (statusMessage === "") return "Unknown Error"
+
+	// Effect ParseError — not valid JSON; label by the first field. Must precede
+	// the JSON branch (these start with "{" but aren't JSON objects).
+	if (statusMessage.startsWith("{ readonly") || statusMessage.includes("└─")) {
+		const m = statusMessage.match(/readonly (\w+)/)
+		return m ? `Schema parse error: ${m[1]}` : "Schema parse error"
+	}
+
+	const obj = tryParseJsonObject(statusMessage)
+	if (obj !== undefined || statusMessage.startsWith("[")) {
+		if (obj !== undefined) {
+			for (const key of LABEL_KEYS) {
+				const v = obj[key]
+				if (typeof v === "string" && v !== "") return v
+			}
+			const type = obj.type
+			if (typeof type === "string" && type !== "") return type.replace(/^.*\//, "")
+		}
+		return "JSON error"
+	}
+
+	// Legacy "ErrorClass: message" / "message (detail)" cut — first matching
+	// delimiter (in this order), else first 150 chars. Mirrors the SQL multiIf.
+	const colon = statusMessage.indexOf(": ")
+	if (colon > 2) return statusMessage.slice(0, colon)
+	const paren = statusMessage.indexOf(" (")
+	if (paren > 2) return statusMessage.slice(0, paren)
+	const newline = statusMessage.indexOf("\n")
+	if (newline > 2) return statusMessage.slice(0, newline)
+	return statusMessage.slice(0, Math.min(statusMessage.length, 150))
+}
 
 export function computeFingerprintInputs(args: {
 	readonly exceptionType: string
@@ -46,7 +125,15 @@ export function computeFingerprintInputs(args: {
 	const topFrame = topFrames[0] ?? ""
 	const fpFrames = topFrames.join("\n")
 
-	const msgFallback = fpFrames === "" ? args.statusMessage.slice(0, 200).replace(MSG_REDACT_RE, "#") : ""
+	let msgFallback = ""
+	if (fpFrames === "") {
+		const obj = tryParseJsonObject(args.statusMessage)
+		msgFallback = obj
+			? jsonSignature(obj)
+			: args.statusMessage.slice(0, 200).replace(MSG_REDACT_RE, "#")
+	}
 
-	return { topFrame, fpFrames, msgFallback }
+	const label = args.exceptionType !== "" ? args.exceptionType : statusLabel(args.statusMessage)
+
+	return { topFrame, fpFrames, msgFallback, label }
 }

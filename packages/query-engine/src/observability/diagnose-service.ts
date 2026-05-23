@@ -98,7 +98,11 @@ export const diagnoseService = Effect.fn("Observability.diagnoseService")(functi
 		},
 		topErrors: pipe(
 			errorsResult.data,
-			Arr.map((e) => ({ errorType: e.errorType, count: Number(e.count) })),
+			Arr.map((e) => ({
+				fingerprintHash: e.fingerprintHash,
+				label: e.errorLabel,
+				count: Number(e.count),
+			})),
 		),
 		recentTraces: pipe(
 			tracesResult.data,

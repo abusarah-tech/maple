@@ -332,7 +332,7 @@ export function compilePipeQuery(pipe: string, params: PipeParams): PipeCompiled
 							rootOnly: bool("root_only"),
 							services: str("services")?.split(",").filter(Boolean),
 							deploymentEnvs: str("deployment_envs")?.split(",").filter(Boolean),
-							errorTypes: str("error_types")?.split(",").filter(Boolean),
+							fingerprintHashes: str("fingerprint_hashes")?.split(",").filter(Boolean),
 							limit: int("limit", 50),
 						}),
 						{ orgId, startTime, endTime },
@@ -343,7 +343,7 @@ export function compilePipeQuery(pipe: string, params: PipeParams): PipeCompiled
 				eraseType(
 					CH.compile(
 						CH.errorsTimeseriesQuery({
-							errorType: String(params.error_type),
+							fingerprintHash: String(params.fingerprint_hash),
 							services: str("services")?.split(",").filter(Boolean),
 						}),
 						{ orgId, startTime, endTime, bucketSeconds: int("bucket_seconds", 3600)! },
@@ -357,7 +357,7 @@ export function compilePipeQuery(pipe: string, params: PipeParams): PipeCompiled
 							rootOnly: bool("root_only"),
 							services: str("services")?.split(",").filter(Boolean),
 							deploymentEnvs: str("deployment_envs")?.split(",").filter(Boolean),
-							errorTypes: str("error_types")?.split(",").filter(Boolean),
+							fingerprintHashes: str("fingerprint_hashes")?.split(",").filter(Boolean),
 						}),
 						{ orgId, startTime, endTime },
 					),
@@ -370,7 +370,7 @@ export function compilePipeQuery(pipe: string, params: PipeParams): PipeCompiled
 							rootOnly: bool("root_only"),
 							services: str("services")?.split(",").filter(Boolean),
 							deploymentEnvs: str("deployment_envs")?.split(",").filter(Boolean),
-							errorTypes: str("error_types")?.split(",").filter(Boolean),
+							fingerprintHashes: str("fingerprint_hashes")?.split(",").filter(Boolean),
 						}),
 						{ orgId, startTime, endTime },
 					),
@@ -380,7 +380,7 @@ export function compilePipeQuery(pipe: string, params: PipeParams): PipeCompiled
 				eraseType(
 					CH.compile(
 						CH.errorDetailTracesQuery({
-							errorType: String(params.error_type),
+							fingerprintHash: String(params.fingerprint_hash),
 							rootOnly: bool("root_only"),
 							services: str("services")?.split(",").filter(Boolean),
 							limit: int("limit", 10),

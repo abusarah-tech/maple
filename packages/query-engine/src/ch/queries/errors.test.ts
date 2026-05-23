@@ -21,23 +21,21 @@ const baseParams = {
 // ---------------------------------------------------------------------------
 
 describe("errorsByTypeQuery", () => {
-	it("compiles basic errors by type", () => {
+	it("compiles basic errors by type from error_events", () => {
 		const q = errorsByTypeQuery({})
 		const { sql } = compileCH(q, baseParams)
-		expect(sql).toContain("FROM error_spans")
-		expect(sql).toContain("AS errorType")
+		// Reads the canonical error_events table, grouping by the ingest fingerprint.
+		expect(sql).toContain("FROM error_events")
+		expect(sql).toContain("toString(FingerprintHash) AS fingerprintHash")
+		expect(sql).toContain("any(ErrorLabel) AS errorLabel")
 		expect(sql).toContain("count() AS count")
 		expect(sql).toContain("uniq(ServiceName) AS affectedServicesCount")
 		expect(sql).toContain("min(Timestamp) AS firstSeen")
 		expect(sql).toContain("max(Timestamp) AS lastSeen")
-		expect(sql).toContain("GROUP BY errorType")
+		expect(sql).toContain("GROUP BY fingerprintHash")
 		expect(sql).toContain("ORDER BY count DESC")
 		expect(sql).toContain("LIMIT 50")
 		expect(sql).toContain("FORMAT JSON")
-		// Fingerprint expression should contain position/left/multiIf
-		expect(sql).toContain("left(")
-		expect(sql).toContain("multiIf(")
-		expect(sql).toContain("position(")
 	})
 
 	it("applies rootOnly filter", () => {
@@ -58,11 +56,10 @@ describe("errorsByTypeQuery", () => {
 		expect(sql).toContain("DeploymentEnv IN ('production')")
 	})
 
-	it("applies errorTypes filter", () => {
-		const q = errorsByTypeQuery({ errorTypes: ["TimeoutError"] })
+	it("filters by fingerprint hash (stable identity round-trip)", () => {
+		const q = errorsByTypeQuery({ fingerprintHashes: ["12345678901234567890"] })
 		const { sql } = compileCH(q, baseParams)
-		// The fingerprint expression should appear in WHERE with IN
-		expect(sql).toContain("IN ('TimeoutError')")
+		expect(sql).toContain("toString(FingerprintHash) IN ('12345678901234567890')")
 	})
 
 	it("applies custom limit", () => {
@@ -78,20 +75,20 @@ describe("errorsByTypeQuery", () => {
 
 describe("errorsTimeseriesQuery", () => {
 	it("compiles error timeseries with bucket", () => {
-		const q = errorsTimeseriesQuery({ errorType: "NullPointerException" })
+		const q = errorsTimeseriesQuery({ fingerprintHash: "98765432109876543210" })
 		const { sql } = compileCH(q, baseParams)
-		expect(sql).toContain("FROM error_spans")
+		expect(sql).toContain("FROM error_events")
 		expect(sql).toContain("toStartOfInterval")
 		expect(sql).toContain("INTERVAL 3600 SECOND")
 		expect(sql).toContain("count() AS count")
 		expect(sql).toContain("GROUP BY bucket")
 		expect(sql).toContain("ORDER BY bucket ASC")
-		// Fingerprint match in WHERE
-		expect(sql).toContain("NullPointerException")
+		// Fingerprint hash filter in WHERE
+		expect(sql).toContain("toString(FingerprintHash) = '98765432109876543210'")
 	})
 
 	it("applies services filter", () => {
-		const q = errorsTimeseriesQuery({ errorType: "X", services: ["api"] })
+		const q = errorsTimeseriesQuery({ fingerprintHash: "1", services: ["api"] })
 		const { sql } = compileCH(q, baseParams)
 		expect(sql).toContain("ServiceName IN ('api')")
 	})
@@ -138,7 +135,7 @@ describe("errorsSummaryQuery", () => {
 
 describe("errorDetailTracesQuery", () => {
 	it("compiles INNER JOIN with error subquery", () => {
-		const q = errorDetailTracesQuery({ errorType: "NullPointerException" })
+		const q = errorDetailTracesQuery({ fingerprintHash: "111" })
 		const { sql } = compileCH(q, baseParams)
 		expect(sql).toContain("INNER JOIN")
 		expect(sql).toContain("GROUP BY TraceId")
@@ -147,26 +144,25 @@ describe("errorDetailTracesQuery", () => {
 		expect(sql).toContain("groupUniqArray(traces.ServiceName)")
 		expect(sql).toContain("ORDER BY startTime DESC")
 		expect(sql).toContain("FORMAT JSON")
-		// Error subquery references error_spans
-		expect(sql).toContain("FROM error_spans")
-		// Fingerprint match
-		expect(sql).toContain("NullPointerException")
+		// Error subquery references error_events, filtered by fingerprint hash
+		expect(sql).toContain("FROM error_events")
+		expect(sql).toContain("toString(FingerprintHash) = '111'")
 	})
 
 	it("applies rootOnly filter", () => {
-		const q = errorDetailTracesQuery({ errorType: "X", rootOnly: true })
+		const q = errorDetailTracesQuery({ fingerprintHash: "1", rootOnly: true })
 		const { sql } = compileCH(q, baseParams)
 		expect(sql).toContain("ParentSpanId = ''")
 	})
 
 	it("applies services filter", () => {
-		const q = errorDetailTracesQuery({ errorType: "X", services: ["api", "web"] })
+		const q = errorDetailTracesQuery({ fingerprintHash: "1", services: ["api", "web"] })
 		const { sql } = compileCH(q, baseParams)
 		expect(sql).toContain("ServiceName IN ('api', 'web')")
 	})
 
 	it("applies custom limit", () => {
-		const q = errorDetailTracesQuery({ errorType: "X", limit: 20 })
+		const q = errorDetailTracesQuery({ fingerprintHash: "1", limit: 20 })
 		const { sql } = compileCH(q, baseParams)
 		// The limit applies to the error subquery
 		expect(sql).toContain("LIMIT 20")
@@ -193,13 +189,13 @@ describe("errorsFacetsQuery", () => {
 			rootOnly: true,
 			services: ["api"],
 			deploymentEnvs: ["prod"],
-			errorTypes: ["TimeoutError"],
+			fingerprintHashes: ["123"],
 		})
 		const { sql } = compileUnion(q, baseParams)
 		expect(sql).toContain("ParentSpanId = ''")
 		expect(sql).toContain("ServiceName IN ('api')")
 		expect(sql).toContain("DeploymentEnv IN ('prod')")
-		expect(sql).toContain("IN ('TimeoutError')")
+		expect(sql).toContain("toString(FingerprintHash) IN ('123')")
 	})
 })
 

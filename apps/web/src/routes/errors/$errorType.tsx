@@ -43,6 +43,8 @@ const errorDetailSearchSchema = Schema.Struct({
 	endTime: Schema.optional(Schema.String),
 	timePreset: Schema.optional(Schema.String),
 	services: OptionalStringArrayParam,
+	// Human-readable label carried from the list so the header isn't a raw hash.
+	label: Schema.optional(Schema.String),
 })
 
 export const Route = effectRoute(createFileRoute("/errors/$errorType"))({
@@ -65,12 +67,12 @@ function truncateErrorType(errorType: string, maxLength = 50): string {
 }
 
 function ErrorDetailContent() {
-	const { errorType: rawErrorType } = Route.useParams()
-	// TanStack Router already decodes route params. A second decodeURIComponent
-	// throws URIError on literal `%` and silently transforms encoded
-	// substrings like `%2F` into `/`, querying the wrong error type.
-	const errorType = rawErrorType
+	// The `$errorType` route param now carries the stable FingerprintHash
+	// (the error identity). TanStack Router already decodes route params.
+	const { errorType: fingerprintHash } = Route.useParams()
 	const search = Route.useSearch()
+	// Prefer the human label passed from the list; fall back to the hash.
+	const displayLabel = search.label ?? fingerprintHash
 	const navigate = useNavigate({ from: Route.fullPath })
 	const { startTime: effectiveStartTime, endTime: effectiveEndTime } = useEffectiveTimeRange(
 		search.startTime,
@@ -100,7 +102,7 @@ function ErrorDetailContent() {
 				startTime: effectiveStartTime,
 				endTime: effectiveEndTime,
 				services: search.services,
-				errorTypes: [errorType],
+				fingerprintHashes: [fingerprintHash],
 			},
 		}),
 	)
@@ -108,7 +110,7 @@ function ErrorDetailContent() {
 	const tracesResult = useRefreshableAtomValue(
 		getErrorDetailTracesResultAtom({
 			data: {
-				errorType,
+				fingerprintHash,
 				startTime: effectiveStartTime,
 				endTime: effectiveEndTime,
 				services: search.services,
@@ -120,7 +122,7 @@ function ErrorDetailContent() {
 	const timeseriesResult = useRefreshableAtomValue(
 		getErrorsTimeseriesResultAtom({
 			data: {
-				errorType,
+				fingerprintHash,
 				startTime: effectiveStartTime,
 				endTime: effectiveEndTime,
 				services: search.services,
@@ -377,8 +379,8 @@ function ErrorDetailContent() {
 
 	return (
 		<DashboardLayout
-			breadcrumbs={[{ label: "Errors", href: "/errors" }, { label: truncateErrorType(errorType, 50) }]}
-			title={errorType}
+			breadcrumbs={[{ label: "Errors", href: "/errors" }, { label: truncateErrorType(displayLabel, 50) }]}
+			title={displayLabel}
 			headerActions={
 				<TimeRangeHeaderControls
 					startTime={search.startTime}

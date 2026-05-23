@@ -60,14 +60,15 @@ export class ErrorsByTypeRequest extends Schema.Class<ErrorsByTypeRequest>("Erro
 	rootOnly: Schema.optional(Schema.Boolean),
 	services: OptionalStringArray,
 	deploymentEnvs: OptionalStringArray,
-	errorTypes: OptionalStringArray,
+	fingerprintHashes: OptionalStringArray,
 	limit: Schema.optional(Schema.Number),
 }) {}
 
 export class ErrorsByTypeResponse extends Schema.Class<ErrorsByTypeResponse>("ErrorsByTypeResponse")({
 	data: Schema.Array(
 		Schema.Struct({
-			errorType: Schema.String,
+			fingerprintHash: Schema.String,
+			errorLabel: Schema.String,
 			sampleMessage: Schema.String,
 			count: Schema.Number,
 			affectedServicesCount: Schema.Number,
@@ -81,7 +82,7 @@ export class ErrorsTimeseriesRequest extends Schema.Class<ErrorsTimeseriesReques
 	{
 		startTime: TinybirdDateTime,
 		endTime: TinybirdDateTime,
-		errorType: Schema.String,
+		fingerprintHash: Schema.String,
 		services: OptionalStringArray,
 		bucketSeconds: Schema.optional(Schema.Number),
 	},
@@ -104,7 +105,7 @@ export class ErrorsSummaryRequest extends Schema.Class<ErrorsSummaryRequest>("Er
 	rootOnly: Schema.optional(Schema.Boolean),
 	services: OptionalStringArray,
 	deploymentEnvs: OptionalStringArray,
-	errorTypes: OptionalStringArray,
+	fingerprintHashes: OptionalStringArray,
 }) {}
 
 export class ErrorsSummaryResponse extends Schema.Class<ErrorsSummaryResponse>("ErrorsSummaryResponse")({
@@ -124,7 +125,7 @@ export class ErrorDetailTracesRequest extends Schema.Class<ErrorDetailTracesRequ
 )({
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
-	errorType: Schema.String,
+	fingerprintHash: Schema.String,
 	rootOnly: Schema.optional(Schema.Boolean),
 	services: OptionalStringArray,
 	limit: Schema.optional(Schema.Number),

@@ -43,7 +43,7 @@ function widgets(serviceName?: string): WidgetDef[] {
 			display: {
 				title: "Errors by Type",
 				columns: [
-					{ field: "errorType", header: "Error Type" },
+					{ field: "errorLabel", header: "Error" },
 					{ field: "count", header: "Count" },
 					{ field: "affectedServicesCount", header: "Services" },
 				],

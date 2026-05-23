@@ -621,6 +621,7 @@ export class ErrorsService extends Context.Service<ErrorsService, ErrorsServiceS
 				serviceName: row.serviceName,
 				exceptionType: row.exceptionType,
 				exceptionMessage: row.exceptionMessage,
+				errorLabel: row.errorLabel,
 				topFrame: row.topFrame,
 				workflowState: row.workflowState,
 				priority: row.priority,
@@ -1778,6 +1779,7 @@ export class ErrorsService extends Context.Service<ErrorsService, ErrorsServiceS
 				serviceName: String(raw.serviceName ?? ""),
 				exceptionType: String(raw.exceptionType ?? ""),
 				exceptionMessage: String(raw.exceptionMessage ?? ""),
+				errorLabel: String(raw.errorLabel ?? ""),
 				topFrame: String(raw.topFrame ?? ""),
 				count: Number(raw.count ?? 0),
 				affectedServicesCount: Number(raw.affectedServicesCount ?? 0),
@@ -1823,6 +1825,7 @@ export class ErrorsService extends Context.Service<ErrorsService, ErrorsServiceS
 								.set({
 									lastSeenAt: lastSeenMs,
 									occurrenceCount: sql`${errorIssues.occurrenceCount} + ${row.count}`,
+									errorLabel: row.errorLabel,
 									updatedAt: windowEndMs,
 								})
 								.where(eq(errorIssues.id, prior.id)),
@@ -1851,6 +1854,7 @@ export class ErrorsService extends Context.Service<ErrorsService, ErrorsServiceS
 								serviceName: row.serviceName,
 								exceptionType: row.exceptionType,
 								exceptionMessage: row.exceptionMessage,
+								errorLabel: row.errorLabel,
 								topFrame: row.topFrame,
 								workflowState: "triage",
 								priority: 3,
