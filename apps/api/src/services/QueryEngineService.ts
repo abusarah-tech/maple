@@ -1359,7 +1359,10 @@ export const makeQueryEngineExecute = (warehouse: QueryEngineWarehouse) =>
 					}),
 					baseParams,
 					"Failed to execute errors facets query",
-					"discovery",
+					// "list" (1.5 GB), not "discovery" (512 MB): the error-type facet computes
+					// errorFingerprint(StatusMessage) as a variable-length GROUP BY key, which
+					// tips just over the discovery cap (~490 MiB observed in production).
+					"list",
 				)
 				return new QueryEngineExecuteResponse({
 					result: {
