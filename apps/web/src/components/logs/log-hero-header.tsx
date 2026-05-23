@@ -5,7 +5,6 @@ import { Badge } from "@maple/ui/components/ui/badge"
 import { Button } from "@maple/ui/components/ui/button"
 import { SheetClose } from "@maple/ui/components/ui/sheet"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@maple/ui/components/ui/tooltip"
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@maple/ui/components/ui/collapsible"
 import { cn } from "@maple/ui/utils"
 import { CopyableValue, tryParseJson } from "@/components/attributes"
 import { highlightCode } from "@/lib/sugar-high"
@@ -95,20 +94,23 @@ export function LogHeroHeader({ log, showClose = true }: LogHeroHeaderProps) {
 				)}
 			</div>
 
+			{/*
+			 * A single message node whose clamp simply toggles — no Collapsible.
+			 * The earlier dual-render (separate clamped preview + animated
+			 * CollapsibleContent, each with its own dangerouslySetInnerHTML)
+			 * flickered on toggle as the two nodes swapped mid-animation.
+			 */}
 			<div className="mt-3">
-				{isLong ? (
-					<Collapsible open={expanded} onOpenChange={setExpanded}>
-						{!expanded && <CopyableValue value={copyValue}>{message(true)}</CopyableValue>}
-						<CollapsibleContent>
-							<CopyableValue value={copyValue}>{message(false)}</CopyableValue>
-						</CollapsibleContent>
-						<CollapsibleTrigger className="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
-							{expanded ? "Show less" : "Show full message"}
-							{expanded ? <ChevronUpIcon size={10} /> : <ChevronDownIcon size={10} />}
-						</CollapsibleTrigger>
-					</Collapsible>
-				) : (
-					<CopyableValue value={copyValue}>{message(false)}</CopyableValue>
+				<CopyableValue value={copyValue}>{message(isLong && !expanded)}</CopyableValue>
+				{isLong && (
+					<button
+						type="button"
+						onClick={() => setExpanded((v) => !v)}
+						className="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+					>
+						{expanded ? "Show less" : "Show full message"}
+						{expanded ? <ChevronUpIcon size={10} /> : <ChevronDownIcon size={10} />}
+					</button>
 				)}
 			</div>
 		</div>
