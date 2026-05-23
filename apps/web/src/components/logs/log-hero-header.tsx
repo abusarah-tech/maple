@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { XmarkIcon, ChevronDownIcon, ChevronUpIcon } from "@/components/icons"
 
 import { Badge } from "@maple/ui/components/ui/badge"
@@ -7,7 +7,8 @@ import { SheetClose } from "@maple/ui/components/ui/sheet"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@maple/ui/components/ui/tooltip"
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@maple/ui/components/ui/collapsible"
 import { cn } from "@maple/ui/utils"
-import { CopyableValue } from "@/components/attributes"
+import { CopyableValue, tryParseJson } from "@/components/attributes"
+import { highlightCode } from "@/lib/sugar-high"
 import { SeverityBadge } from "./severity-badge"
 import type { Log } from "@/api/tinybird/logs"
 
@@ -37,7 +38,41 @@ export function LogHeroHeader({ log, showClose = true }: LogHeroHeaderProps) {
 	const [expanded, setExpanded] = useState(false)
 	const tone = HERO_TONE[log.severityText.toUpperCase()] ?? "border-border"
 	const body = log.body ?? ""
-	const isLong = body.length > BODY_LINE_THRESHOLD || body.includes("\n")
+
+	// A JSON body (object/array) is pretty-printed and syntax-highlighted, like
+	// the Raw panel; anything else renders as plain text.
+	const parsed = tryParseJson(body)
+	const isJson = parsed !== null
+	const formatted = useMemo(
+		() => (parsed !== null ? JSON.stringify(parsed, null, 2) : body),
+		[parsed, body],
+	)
+	const highlighted = useMemo(() => (isJson ? highlightCode(formatted) : ""), [isJson, formatted])
+	const copyValue = isJson ? formatted : body
+	const isLong = formatted.length > BODY_LINE_THRESHOLD || formatted.includes("\n")
+
+	// `clamp` truncates the collapsed preview; JSON gets a few more lines since
+	// pretty-printing spreads it out vertically.
+	const message = (clamp: boolean) =>
+		isJson ? (
+			<pre
+				className={cn(
+					"font-mono text-[13px] leading-relaxed whitespace-pre-wrap break-words",
+					clamp && "line-clamp-6",
+				)}
+			>
+				<code dangerouslySetInnerHTML={{ __html: highlighted }} />
+			</pre>
+		) : (
+			<p
+				className={cn(
+					"font-mono text-sm leading-relaxed whitespace-pre-wrap break-words",
+					clamp && "line-clamp-4",
+				)}
+			>
+				{body}
+			</p>
+		)
 
 	return (
 		<div className={cn("border-b px-4 py-3 shrink-0", tone)}>
@@ -63,19 +98,9 @@ export function LogHeroHeader({ log, showClose = true }: LogHeroHeaderProps) {
 			<div className="mt-3">
 				{isLong ? (
 					<Collapsible open={expanded} onOpenChange={setExpanded}>
-						{!expanded && (
-							<CopyableValue value={body}>
-								<p className="font-mono text-sm leading-relaxed whitespace-pre-wrap break-words line-clamp-4">
-									{body}
-								</p>
-							</CopyableValue>
-						)}
+						{!expanded && <CopyableValue value={copyValue}>{message(true)}</CopyableValue>}
 						<CollapsibleContent>
-							<CopyableValue value={body}>
-								<p className="font-mono text-sm leading-relaxed whitespace-pre-wrap break-words">
-									{body}
-								</p>
-							</CopyableValue>
+							<CopyableValue value={copyValue}>{message(false)}</CopyableValue>
 						</CollapsibleContent>
 						<CollapsibleTrigger className="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
 							{expanded ? "Show less" : "Show full message"}
@@ -83,11 +108,7 @@ export function LogHeroHeader({ log, showClose = true }: LogHeroHeaderProps) {
 						</CollapsibleTrigger>
 					</Collapsible>
 				) : (
-					<CopyableValue value={body}>
-						<p className="font-mono text-sm leading-relaxed whitespace-pre-wrap break-words">
-							{body}
-						</p>
-					</CopyableValue>
+					<CopyableValue value={copyValue}>{message(false)}</CopyableValue>
 				)}
 			</div>
 		</div>
