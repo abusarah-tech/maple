@@ -1,5 +1,6 @@
 import { migration_0001_initial } from "./0001_initial"
 import { migration_0002_service_map_edges_rollup } from "./0002_service_map_edges_rollup"
+import { migration_0003_error_events_label } from "./0003_error_events_label"
 
 export interface ClickHouseMigration {
 	readonly version: number
@@ -24,4 +25,5 @@ export interface ClickHouseMigration {
 export const migrations: ReadonlyArray<ClickHouseMigration> = [
 	migration_0001_initial,
 	migration_0002_service_map_edges_rollup,
+	migration_0003_error_events_label,
 ] as const

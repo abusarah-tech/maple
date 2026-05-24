@@ -468,6 +468,68 @@ const parseJsonEachRow = <T>(text: string): ReadonlyArray<T> => {
 	return out
 }
 
+// ---------------------------------------------------------------------------
+// Linear migration runner
+//
+// `applySchema` is migration-aware: it replays the ordered `clickHouseMigrations`
+// deltas (the same list `@maple/clickhouse-cli` bundles) and tracks applied
+// versions in `_maple_schema_migrations`. This is what lets MV *body* changes
+// (a frozen `CREATE MATERIALIZED VIEW`) actually reach an existing cluster —
+// the snapshot diff below only does additive `ALTER TABLE ADD COLUMN` and a
+// presence-only MV check, so on its own it can never recreate a drifted MV.
+// The two stay compatible by using the identical bookkeeping table + protocol
+// as the CLI's `applyMigrations`.
+// ---------------------------------------------------------------------------
+
+const MIGRATIONS_TABLE = "_maple_schema_migrations"
+const quoteIdent = (name: string): string => `\`${name.replace(/`/g, "``")}\``
+
+const ensureMigrationsTable = (config: ClickHouseExecConfig) =>
+	execClickHouse(
+		config,
+		`CREATE TABLE IF NOT EXISTS ${quoteIdent(MIGRATIONS_TABLE)} (
+			version UInt32,
+			applied_at DateTime64(3) DEFAULT now64(3),
+			description String
+		) ENGINE = MergeTree ORDER BY version`,
+	)
+
+const readAppliedMigrationVersions = (config: ClickHouseExecConfig) =>
+	Effect.gen(function* () {
+		const text = yield* execClickHouse(
+			config,
+			`SELECT version FROM ${quoteIdent(MIGRATIONS_TABLE)} FORMAT JSONEachRow`,
+		)
+		return new Set(parseJsonEachRow<{ version: number }>(text).map((r) => Number(r.version)))
+	})
+
+const recordAppliedMigration = (config: ClickHouseExecConfig, version: number, description: string) =>
+	execClickHouse(
+		config,
+		`INSERT INTO ${quoteIdent(MIGRATIONS_TABLE)} (version, description) VALUES (${version}, '${description.replace(/'/g, "''")}')`,
+	)
+
+/**
+ * Replay every bundled migration the target hasn't recorded yet, in order.
+ * Each migration's statements run sequentially; the version is recorded only
+ * after all its statements succeed. Returns human-readable labels of what ran.
+ */
+const runPendingMigrations = (config: ClickHouseExecConfig) =>
+	Effect.gen(function* () {
+		yield* ensureMigrationsTable(config)
+		const applied = yield* readAppliedMigrationVersions(config)
+		const ran: string[] = []
+		for (const migration of clickHouseMigrations) {
+			if (applied.has(migration.version)) continue
+			for (const stmt of migration.statements) {
+				yield* execClickHouse(config, qualifyStatementForDatabase(stmt, config.database))
+			}
+			yield* recordAppliedMigration(config, migration.version, migration.description)
+			ran.push(`migration ${migration.version}: ${migration.description}`)
+		}
+		return ran
+	})
+
 // --- Service -----------------------------------------------------------------
 
 export class OrgClickHouseSettingsService extends Context.Service<
@@ -712,13 +774,20 @@ export class OrgClickHouseSettingsService extends Context.Service<
 			yield* requireAdmin(roles)
 			const row = yield* requireActiveRow(orgId)
 			const config = yield* loadConfigForRow(row)
+
+			const applied: string[] = []
+			const skipped: Array<{ name: string; reason: string }> = []
+
+			// Migration-aware step: replay ordered deltas (incl. MV DROP/CREATE
+			// recreations) the cluster hasn't recorded yet. The snapshot diff below
+			// then mops up any additive column drift not covered by a delta.
+			const ranMigrations = yield* runPendingMigrations(config)
+			applied.push(...ranMigrations)
+
 			const desired = getDesiredTables()
 			const desiredByName = new Map(desired.map((t) => [t.name, t]))
 			const actual = yield* fetchActualSchema(config)
 			const entries = computeSchemaDiff({ tables: desired }, actual)
-
-			const applied: string[] = []
-			const skipped: Array<{ name: string; reason: string }> = []
 
 			// Track tables whose drift was *fully* resolved by additive ALTERs, so
 			// the schemaVersion bump below stays accurate.
