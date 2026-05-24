@@ -81,8 +81,8 @@ export function DestinationCard({
 							/>
 							{isHealthy && destination.lastTestedAt && (
 								<span className="relative inline-flex items-center" aria-hidden>
-									<span className="absolute inline-flex size-1.5 animate-ping rounded-full bg-emerald-400 opacity-75" />
-									<span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
+									<span className="absolute inline-flex size-1.5 animate-ping rounded-full bg-success opacity-75" />
+									<span className="relative inline-flex size-1.5 rounded-full bg-success" />
 								</span>
 							)}
 						</div>

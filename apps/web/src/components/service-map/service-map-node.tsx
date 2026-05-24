@@ -72,9 +72,9 @@ function getHealthDotClass(errorRate: number): string {
 }
 
 function getSelectedBorderClass(errorRate: number): string {
-	if (errorRate > 0.05) return "border-severity-error shadow-[0_0_0_3px_oklch(0.5_0.2_25/0.15)]"
-	if (errorRate > 0.01) return "border-severity-warn shadow-[0_0_0_3px_oklch(0.6_0.15_60/0.15)]"
-	return "border-border-active shadow-[0_0_0_3px_oklch(0.3_0.02_60/0.2)]"
+	if (errorRate > 0.05) return "border-severity-error ring-[3px] ring-severity-error/15"
+	if (errorRate > 0.01) return "border-severity-warn ring-[3px] ring-severity-warn/15"
+	return "border-border-active ring-[3px] ring-foreground/15"
 }
 
 function MetricCell({

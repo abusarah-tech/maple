@@ -163,7 +163,7 @@ export function TraceFlowView() {
 				<div className="flex items-center gap-1.5">
 					<div
 						className="size-3 rounded-sm shadow-sm"
-						style={{ backgroundColor: "oklch(0.62 0.20 25)" }}
+						style={{ backgroundColor: "var(--severity-error)" }}
 					/>
 					<span className="font-medium">Error</span>
 				</div>

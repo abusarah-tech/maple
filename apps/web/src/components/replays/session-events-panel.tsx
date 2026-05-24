@@ -114,8 +114,8 @@ function timeOf(ts: string): string {
 
 function statusTone(status: number): string {
 	if (status >= 500 || status === 0) return "text-destructive"
-	if (status >= 400) return "text-amber-600 dark:text-amber-400"
-	return "text-emerald-600 dark:text-emerald-400"
+	if (status >= 400) return "text-warning-foreground"
+	return "text-success-foreground"
 }
 
 function EventLine({ ev, onSeek }: { ev: EventRow; onSeek: () => void }) {
@@ -131,7 +131,7 @@ function EventLine({ ev, onSeek }: { ev: EventRow; onSeek: () => void }) {
 			</button>
 			<div className="min-w-0 flex-1">
 				{ev.type === "console" && (
-					<span className={ev.level === "error" || ev.level === "warn" ? "text-amber-600 dark:text-amber-400" : ""}>
+					<span className={ev.level === "error" || ev.level === "warn" ? "text-warning-foreground" : ""}>
 						<span className="mr-1.5 uppercase opacity-60">{ev.level || "log"}</span>
 						{ev.message}
 					</span>

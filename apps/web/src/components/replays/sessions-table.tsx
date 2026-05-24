@@ -222,8 +222,8 @@ function StatusDot({ active }: { active: boolean }) {
 		return <span className="size-1.5 rounded-full bg-muted-foreground/40" title="ended" />
 	return (
 		<span className="relative flex size-1.5" title="active">
-			<span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-75" />
-			<span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
+			<span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-75" />
+			<span className="relative inline-flex size-1.5 rounded-full bg-success" />
 		</span>
 	)
 }

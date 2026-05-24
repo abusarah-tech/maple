@@ -375,18 +375,18 @@ export function ListConfigPanel() {
 					return (
 						<div className="mt-1.5 space-y-1.5">
 							{slow.length > 0 && (
-								<div className="space-y-1 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+								<div className="space-y-1 rounded-md border border-warning/20 bg-warning/5 px-3 py-2">
 									{slow.map((h) => (
-										<p key={h.key} className="text-[11px] text-amber-500">
+										<p key={h.key} className="text-[11px] text-warning">
 											{h.reason}
 										</p>
 									))}
 								</div>
 							)}
 							{fast.length > 0 && (
-								<div className="space-y-1 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
+								<div className="space-y-1 rounded-md border border-success/20 bg-success/5 px-3 py-2">
 									{fast.map((h) => (
-										<p key={h.key} className="text-[11px] text-emerald-500">
+										<p key={h.key} className="text-[11px] text-success">
 											{h.reason}
 										</p>
 									))}

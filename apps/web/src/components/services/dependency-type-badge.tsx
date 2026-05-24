@@ -1,3 +1,4 @@
+import { Badge } from "@maple/ui/components/ui/badge"
 import { cn } from "@maple/ui/utils"
 import {
 	DatabaseIcon,
@@ -32,15 +33,16 @@ const labels: Record<DependencyKind, string> = {
 	rpc: "RPC",
 }
 
-// Token-based palette so the badge tracks the user's theme. Each tone pairs a
-// soft tinted background with a muted foreground; consistent visual weight so
-// no single category dominates the column read.
+// Token-based palette so the badge tracks the user's theme. Each tone maps a
+// category onto an existing chart/severity token (mirroring MetricTypeBadge) so
+// no category reaches for a raw Tailwind palette color, and visual weight stays
+// even across the column.
 const tones: Record<DependencyKind, string> = {
-	service: "bg-severity-info/10 text-severity-info border-severity-info/20",
-	database: "bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-300",
-	http: "bg-foreground/5 text-muted-foreground border-border",
-	messaging: "bg-violet-500/10 text-violet-600 border-violet-500/20 dark:text-violet-300",
-	rpc: "bg-cyan-500/10 text-cyan-600 border-cyan-500/20 dark:text-cyan-300",
+	service: "bg-severity-info/10 text-severity-info",
+	database: "bg-chart-3/10 text-chart-3",
+	http: "bg-foreground/5 text-muted-foreground",
+	messaging: "bg-chart-4/10 text-chart-4",
+	rpc: "bg-chart-5/10 text-chart-5",
 }
 
 function getIcon(kind: DependencyKind) {
@@ -61,15 +63,9 @@ function getIcon(kind: DependencyKind) {
 export function DependencyTypeBadge({ kind, className }: DependencyTypeBadgeProps) {
 	const Icon = getIcon(kind)
 	return (
-		<span
-			className={cn(
-				"inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
-				tones[kind],
-				className,
-			)}
-		>
+		<Badge variant="secondary" size="sm" className={cn("uppercase", tones[kind], className)}>
 			<Icon size={10} />
 			{labels[kind]}
-		</span>
+		</Badge>
 	)
 }

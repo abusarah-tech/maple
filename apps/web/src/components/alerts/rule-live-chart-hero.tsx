@@ -116,7 +116,7 @@ function BreachPill({ stats }: { stats: BreachStats }) {
 	if (stats.bucketCount === 0) return null
 	if (stats.breachCount === 0) {
 		return (
-			<span className="hidden items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 sm:inline-flex">
+			<span className="hidden items-center gap-1 text-xs text-success-foreground sm:inline-flex">
 				<CheckIcon size={12} />
 				No breaches in 24h
 			</span>
@@ -160,7 +160,7 @@ function PreviewBadge({
 			<span
 				className={cn(
 					"font-mono text-sm font-semibold tabular-nums",
-					status === "breached" ? "text-destructive" : "text-emerald-500",
+					status === "breached" ? "text-destructive" : "text-success",
 				)}
 			>
 				{formatSignalValue(signalType, value)}

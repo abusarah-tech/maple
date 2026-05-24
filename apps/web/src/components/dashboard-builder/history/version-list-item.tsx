@@ -29,7 +29,7 @@ const KIND_DOT: Record<DashboardVersionChangeKind, string> = {
 	widget_removed: "bg-severity-warn",
 	widget_updated: "bg-chart-4",
 	layout_changed: "bg-muted-foreground",
-	restored: "bg-primary shadow-[0_0_0_3px_oklch(0.59_0.14_242/0.18)]",
+	restored: "bg-primary ring-[3px] ring-primary/18",
 	multiple: "bg-chart-5",
 }
 

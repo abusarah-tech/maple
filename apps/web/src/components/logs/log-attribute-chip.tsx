@@ -8,7 +8,7 @@ import type { ChipTone } from "@/lib/log-attributes"
 
 const TONE_CLASSES: Record<ChipTone, string> = {
 	error: "bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/15",
-	warn: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20 hover:bg-amber-500/15",
+	warn: "bg-warning/10 text-warning-foreground border-warning/20 hover:bg-warning/15",
 	info: "bg-muted text-foreground/80 border-border hover:bg-muted/80",
 	muted: "bg-muted/40 text-muted-foreground border-border/60 hover:bg-muted/70",
 }

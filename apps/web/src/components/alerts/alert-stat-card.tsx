@@ -7,8 +7,8 @@ type Tone = "default" | "critical" | "emerald" | "amber"
 const valueToneClass: Record<Tone, string> = {
 	default: "text-foreground",
 	critical: "text-destructive",
-	emerald: "text-emerald-500",
-	amber: "text-amber-500",
+	emerald: "text-success",
+	amber: "text-warning",
 }
 
 export function AlertStatCard({
@@ -74,10 +74,10 @@ export function AlertFiringHero({
 
 	if (!firing) {
 		return (
-			<Card className="relative ring-emerald-500/25">
+			<Card className="relative ring-success/25">
 				<span
 					aria-hidden
-					className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-r from-emerald-500/[0.06] via-transparent to-transparent"
+					className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-r from-success/[0.06] via-transparent to-transparent"
 				/>
 				<CardContent className="relative flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-5">
 					<div className="flex items-center gap-3 min-w-0">
@@ -85,7 +85,7 @@ export function AlertFiringHero({
 						<div className="flex flex-col gap-0.5 min-w-0">
 							<div className="flex items-center gap-2 text-base font-semibold tracking-tight">
 								All services healthy
-								<span className="rounded-full bg-emerald-500/10 px-1.5 py-px text-[10px] font-medium uppercase tracking-[0.14em] text-emerald-500/90">
+								<span className="rounded-full bg-success/10 px-1.5 py-px text-[10px] font-medium uppercase tracking-[0.14em] text-success/90">
 									OK
 								</span>
 							</div>
@@ -157,7 +157,7 @@ export function AlertFiringHero({
 function StatusDot({ tone, pulse = false }: { tone: "emerald" | "destructive"; pulse?: boolean }) {
 	const colors =
 		tone === "emerald"
-			? { bg: "bg-emerald-500", halo: "bg-emerald-500/15" }
+			? { bg: "bg-success", halo: "bg-success/15" }
 			: { bg: "bg-destructive", halo: "bg-destructive/20" }
 	return (
 		<span className="relative flex size-8 shrink-0 items-center justify-center">

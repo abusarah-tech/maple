@@ -182,7 +182,7 @@ export function SpanRow({
 						<span
 							className={cn(
 								"px-1 py-0.5 rounded text-[10px] font-bold text-white shrink-0 leading-none hidden @min-[500px]:inline-flex",
-								HTTP_METHOD_COLORS[httpInfo.method] || "bg-[#5A5248]",
+								HTTP_METHOD_COLORS[httpInfo.method] || "bg-muted-foreground",
 							)}
 						>
 							{httpInfo.method}

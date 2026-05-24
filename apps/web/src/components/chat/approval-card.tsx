@@ -43,12 +43,12 @@ export function ApprovalCard({ toolName, input, approvalId, onApprove, onDeny }:
 	}
 
 	return (
-		<div className="my-2 overflow-hidden rounded-lg border border-amber-500/40 bg-amber-500/5 text-xs">
+		<div className="my-2 overflow-hidden rounded-lg border border-warning/40 bg-warning/5 text-xs">
 			<div className="flex items-center gap-2 px-3 py-2">
-				<CircleWarningIcon className="size-3.5 shrink-0 text-amber-500" />
+				<CircleWarningIcon className="size-3.5 shrink-0 text-warning" />
 				<span className="font-medium">Approval required: {label}</span>
 			</div>
-			<div className="border-t border-amber-500/20 bg-background/50 p-3">
+			<div className="border-t border-warning/20 bg-background/50 p-3">
 				<ApprovalSummary toolName={toolName} input={input} />
 
 				<button

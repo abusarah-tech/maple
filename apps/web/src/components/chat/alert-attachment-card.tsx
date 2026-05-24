@@ -11,14 +11,14 @@ interface AlertAttachmentCardProps {
 
 const accentBySeverity: Record<string, { stripe: string; tint: string; label: string }> = {
 	critical: { stripe: "bg-destructive", tint: "bg-destructive/[0.04]", label: "Critical" },
-	warning: { stripe: "bg-severity-warn", tint: "bg-severity-warn/[0.04]", label: "Warning" },
+	warning: { stripe: "bg-warning", tint: "bg-warning/[0.04]", label: "Warning" },
 }
 
 const eventMeta: Record<string, { label: string; dot: string; text: string }> = {
 	trigger: { label: "Triggered", dot: "bg-destructive", text: "text-destructive" },
-	renotify: { label: "Re-notified", dot: "bg-amber-500", text: "text-amber-500" },
-	resolve: { label: "Resolved", dot: "bg-emerald-500", text: "text-emerald-500" },
-	test: { label: "Test", dot: "bg-sky-500", text: "text-sky-500" },
+	renotify: { label: "Re-notified", dot: "bg-warning", text: "text-warning" },
+	resolve: { label: "Resolved", dot: "bg-success", text: "text-success" },
+	test: { label: "Test", dot: "bg-info", text: "text-info" },
 }
 
 const capitalize = (s: string): string => (s.length === 0 ? s : s[0]!.toUpperCase() + s.slice(1))

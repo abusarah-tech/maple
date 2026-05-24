@@ -4,10 +4,10 @@ export type AlertStatusState = "firing" | "ok" | "disabled" | "resolved" | "pend
 
 const toneByState: Record<AlertStatusState, { dot: string; text: string; label: string }> = {
 	firing: { dot: "bg-destructive", text: "text-destructive font-medium", label: "Firing" },
-	ok: { dot: "bg-emerald-500", text: "text-emerald-500", label: "OK" },
+	ok: { dot: "bg-success", text: "text-success", label: "OK" },
 	disabled: { dot: "bg-muted-foreground", text: "text-muted-foreground", label: "Disabled" },
-	resolved: { dot: "bg-emerald-500", text: "text-emerald-500", label: "Resolved" },
-	pending: { dot: "bg-amber-500", text: "text-amber-500", label: "Pending" },
+	resolved: { dot: "bg-success", text: "text-success", label: "Resolved" },
+	pending: { dot: "bg-warning", text: "text-warning", label: "Pending" },
 }
 
 export function AlertStatusBadge({

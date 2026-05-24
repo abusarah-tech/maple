@@ -111,7 +111,7 @@ function ValidationSummary({
 }) {
 	if (ready) {
 		return (
-			<span className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+			<span className="flex items-center gap-1.5 text-xs text-success-foreground">
 				<CheckIcon size={14} />
 				Ready to save
 			</span>
@@ -124,7 +124,7 @@ function ValidationSummary({
 				"flex min-w-0 items-center gap-1.5 truncate text-xs text-muted-foreground",
 			)}
 		>
-			<CircleWarningIcon size={14} className="shrink-0 text-amber-500" />
+			<CircleWarningIcon size={14} className="shrink-0 text-warning" />
 			<span className="truncate">
 				Missing: <span className="text-foreground">{summary}</span>
 			</span>

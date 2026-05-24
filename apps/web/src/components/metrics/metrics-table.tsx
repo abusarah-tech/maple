@@ -1,6 +1,7 @@
 import { Result, useAtomValue } from "@/lib/effect-atom"
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@maple/ui/components/ui/table"
+import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "@maple/ui/components/ui/empty"
 import { Skeleton } from "@maple/ui/components/ui/skeleton"
 import { Badge } from "@maple/ui/components/ui/badge"
 import { MetricTypeBadge } from "./metric-type-badge"
@@ -105,28 +106,31 @@ export function MetricsTable({
 	return Result.builder(metricsResult)
 		.onInitial(() => <LoadingState />)
 		.onError((error) => <QueryErrorState error={error} />)
-		.onSuccess((response, result) => (
-			<div className={`space-y-4 ${result.waiting ? "opacity-60" : ""}`}>
-				<div className="rounded-md border overflow-auto">
-					<Table className="table-fixed">
-						<TableHeader>
-							<TableRow>
-								<TableHead className="w-[40%]">Metric Name</TableHead>
-								<TableHead className="w-[100px]">Type</TableHead>
-								<TableHead className="w-[120px]">Service</TableHead>
-								<TableHead className="w-[100px]">Points</TableHead>
-								<TableHead className="w-[100px]">Last Seen</TableHead>
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{response.data.length === 0 ? (
+		.onSuccess((response, result) =>
+			response.data.length === 0 ? (
+				<Empty>
+					<EmptyHeader>
+						<EmptyTitle>No metrics found</EmptyTitle>
+						<EmptyDescription>
+							No metrics matched your filters in the selected time range.
+						</EmptyDescription>
+					</EmptyHeader>
+				</Empty>
+			) : (
+				<div className={`space-y-4 ${result.waiting ? "opacity-60" : ""}`}>
+					<div className="rounded-md border overflow-auto">
+						<Table className="table-fixed">
+							<TableHeader>
 								<TableRow>
-									<TableCell colSpan={5} className="h-24 text-center">
-										No metrics found
-									</TableCell>
+									<TableHead className="w-[40%]">Metric Name</TableHead>
+									<TableHead className="w-[100px]">Type</TableHead>
+									<TableHead className="w-[120px]">Service</TableHead>
+									<TableHead className="w-[100px]">Points</TableHead>
+									<TableHead className="w-[100px]">Last Seen</TableHead>
 								</TableRow>
-							) : (
-								response.data.map((metric) => {
+							</TableHeader>
+							<TableBody>
+								{response.data.map((metric) => {
 									const isSelected =
 										selectedMetric?.metricName === metric.metricName &&
 										selectedMetric?.metricType === metric.metricType &&
@@ -140,7 +144,10 @@ export function MetricsTable({
 										>
 											<TableCell>
 												<div className="flex min-w-0 flex-col gap-0.5">
-													<span className="truncate font-mono text-xs" title={metric.metricName}>
+													<span
+														className="truncate font-mono text-xs"
+														title={metric.metricName}
+													>
 														{metric.metricName}
 													</span>
 													{metric.metricDescription && (
@@ -155,7 +162,10 @@ export function MetricsTable({
 											</TableCell>
 											<TableCell className="hidden md:table-cell">
 												{metric.serviceName ? (
-													<Badge variant="outline" className="font-mono text-[10px]">
+													<Badge
+														variant="outline"
+														className="font-mono text-[10px]"
+													>
 														{metric.serviceName}
 													</Badge>
 												) : (
@@ -170,14 +180,16 @@ export function MetricsTable({
 											</TableCell>
 										</TableRow>
 									)
-								})
-							)}
-						</TableBody>
-					</Table>
-				</div>
+								})}
+							</TableBody>
+						</Table>
+					</div>
 
-				<div className="text-sm text-muted-foreground">Showing {response.data.length} metrics</div>
-			</div>
-		))
+					<div className="text-sm text-muted-foreground">
+						Showing {response.data.length} metrics
+					</div>
+				</div>
+			),
+		)
 		.render()
 }

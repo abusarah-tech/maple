@@ -291,7 +291,7 @@ function BarCell({ value, max, tone, align, children }: BarCellProps) {
 						align === "right" ? "right-2" : "left-2",
 						tone === "calls" && "bg-severity-info/20",
 						tone === "errors" && "bg-severity-error/25",
-						tone === "latency" && "bg-amber-500/15 dark:bg-amber-400/15",
+						tone === "latency" && "bg-severity-warn/20",
 					)}
 					style={{ width: `calc(${pct}% - 0.5rem)` }}
 				/>

@@ -9,6 +9,8 @@ import { Result, useAtomSet, useAtomValue } from "@/lib/effect-atom"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 
 const HAZEL_DOCS_URL = "https://hazel.sh/docs/integrations/maple"
+/** Hazel's brand orange — third-party brand color, no app token applies. */
+const HAZEL_ACCENT = "#F46F0F"
 
 export function IntegrationsSection() {
 	return (
@@ -95,7 +97,7 @@ function HazelIntegrationCard() {
 	return (
 		<div
 			className="flex items-start gap-4 rounded-lg border border-border/60 bg-card p-4"
-			style={{ ["--tile-accent" as string]: "#F46F0F" }}
+			style={{ ["--tile-accent" as string]: HAZEL_ACCENT }}
 		>
 			<span
 				className="relative inline-flex size-12 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-card"
@@ -108,7 +110,7 @@ function HazelIntegrationCard() {
 							"radial-gradient(circle at 30% 20%, rgba(244,111,15,0.16), transparent 70%)",
 					}}
 				/>
-				<span className="relative" style={{ color: "#F46F0F" }}>
+				<span className="relative" style={{ color: HAZEL_ACCENT }}>
 					<HazelIcon size={22} />
 				</span>
 			</span>
@@ -119,7 +121,7 @@ function HazelIntegrationCard() {
 						<div className="flex items-center gap-2">
 							<h3 className="text-sm font-semibold">Hazel</h3>
 							{isConnected ? (
-								<span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-400">
+								<span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-success-foreground">
 									Connected
 								</span>
 							) : (
@@ -188,7 +190,7 @@ function HazelIntegrationCard() {
 							size="sm"
 							onClick={handleConnect}
 							disabled={busy !== null}
-							style={{ background: "#F46F0F", borderColor: "#F46F0F", color: "#fff" }}
+							style={{ background: HAZEL_ACCENT, borderColor: HAZEL_ACCENT, color: "#fff" }}
 						>
 							{busy === "connect" ? <LoaderIcon size={14} className="animate-spin" /> : null}
 							Connect Hazel

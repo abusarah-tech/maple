@@ -65,7 +65,7 @@ function Tile({
 		<div
 			className={cn(
 				"flex items-center gap-2 rounded-md border px-3 py-2 text-xs",
-				tone === "ok" && "border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400",
+				tone === "ok" && "border-success/30 bg-success/5 text-success-foreground",
 				tone === "alert" && "border-destructive/30 bg-destructive/5 text-destructive",
 				tone === "muted" && "border-border bg-muted/30",
 				className,
