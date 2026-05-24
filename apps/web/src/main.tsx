@@ -18,21 +18,23 @@ import { MapleBrowser } from "@maple/browser"
 import { ingestUrl } from "./lib/services/common/ingest-url"
 import "./styles.css"
 
-// Dev-only browser session replay + tracing for the dashboard itself. The
-// effect-sdk client tracer already instruments every Effect HTTP request and
-// feeds its trace ids into the replay session sink, so auto fetch instrumentation
-// is OFF (`instrumentFetch: false`) — otherwise it would attach redundant raw
-// network spans to "Correlated traces" instead of the real Effect/backend traces.
-// Gated on DEV + key so the deployed dashboard never self-records.
+// Browser session replay + tracing for the dashboard itself. The effect-sdk
+// client tracer already instruments every Effect HTTP request and feeds its
+// trace ids into the replay session sink, so auto fetch instrumentation is OFF
+// (`instrumentFetch: false`) — otherwise it would attach redundant raw network
+// spans to "Correlated traces" instead of the real Effect/backend traces.
+// Gated on the ingest key alone: present in dev (full sampling) and in prod
+// builds where VITE_MAPLE_INGEST_KEY is set. Prod self-recording is sampled
+// down to keep the self-observability ingest loop manageable.
 const replayIngestKey = import.meta.env.VITE_MAPLE_INGEST_KEY?.trim()
-if (import.meta.env.DEV && replayIngestKey) {
+if (replayIngestKey) {
 	MapleBrowser.init({
 		ingestKey: replayIngestKey,
 		serviceName: "maple-web",
 		endpoint: ingestUrl,
 		environment: import.meta.env.MODE,
 		tracing: { enabled: true, instrumentFetch: false },
-		replay: { enabled: true, sampleRate: 1 },
+		replay: { enabled: true, sampleRate: import.meta.env.DEV ? 1 : 0.1 },
 	})
 }
 
