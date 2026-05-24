@@ -1,10 +1,18 @@
 import type { IconProps } from "./icon"
 
 const paths: ReadonlyArray<string> = [
-	"M3 4H21V10H3Z",
-	"M3 14H21V20H3Z",
-	"M7 7L7 7.01",
-	"M7 17L7 17.01",
+	"M17 6.5V6.49",
+	"M13 6.5V6.49",
+	"M17 17.5V17.49",
+	"M13 17.5V17.49",
+	"M5 3L19 3",
+	"M5 10L19 10",
+	"M5 14L19 14",
+	"M5 21L19 21",
+	"M3 16V19",
+	"M21 16V19",
+	"M21 5V8",
+	"M3 5V8",
 ]
 
 function ServerIcon({ size = 24, className, ...props }: IconProps) {
