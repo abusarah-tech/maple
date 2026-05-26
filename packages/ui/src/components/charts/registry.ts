@@ -11,6 +11,7 @@ import {
 	pieSampleData,
 	histogramSampleData,
 	heatmapSampleData,
+	funnelSampleData,
 } from "./_shared/sample-data"
 
 export const chartRegistry: ChartRegistryEntry[] = [
@@ -183,6 +184,21 @@ export const chartRegistry: ChartRegistryEntry[] = [
 		),
 		sampleData: heatmapSampleData,
 		tags: ["heatmap", "density", "2d", "query-builder"],
+	},
+
+	// Funnels
+	{
+		id: "query-builder-funnel",
+		name: "Query Builder Funnel",
+		description: "Stage-by-stage conversion as descending bars",
+		category: "funnel",
+		component: lazy(() =>
+			import("./funnel/query-builder-funnel-chart").then((m) => ({
+				default: m.QueryBuilderFunnelChart,
+			})),
+		),
+		sampleData: funnelSampleData,
+		tags: ["funnel", "conversion", "stages", "query-builder"],
 	},
 ]
 

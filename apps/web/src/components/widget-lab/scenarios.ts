@@ -745,6 +745,67 @@ export const pieScenarios: WidgetScenario[] = [
 ]
 
 // ---------------------------------------------------------------------------
+// Funnel
+// ---------------------------------------------------------------------------
+
+const funnelStages = [
+	{ name: "Visited", value: 4820 },
+	{ name: "Signed up", value: 2110 },
+	{ name: "Activated", value: 940 },
+	{ name: "Converted", value: 360 },
+]
+
+const funnelManyStages = [
+	{ name: "Page view", value: 12840 },
+	{ name: "Add to cart", value: 6210 },
+	{ name: "Checkout started", value: 3180 },
+	{ name: "Payment info", value: 1740 },
+	{ name: "Order placed", value: 1120 },
+	{ name: "Repeat purchase", value: 410 },
+]
+
+export const funnelScenarios: WidgetScenario[] = [
+	{
+		label: "4 stages (% of first)",
+		dataState: ready(funnelStages),
+		display: { title: "Signup conversion", unit: "number", funnel: {} },
+	},
+	{
+		label: "Step conversion %",
+		dataState: ready(funnelStages),
+		display: {
+			title: "Signup conversion",
+			unit: "number",
+			funnel: { showStepPercent: true },
+		},
+	},
+	{
+		label: "6 stages",
+		dataState: ready(funnelManyStages),
+		display: {
+			title: "Checkout funnel",
+			unit: "number",
+			funnel: { showStepPercent: true },
+		},
+	},
+	{
+		label: "Single stage (100%)",
+		dataState: ready([{ name: "Visited", value: 4820 }]),
+		display: { title: "Single stage", unit: "number", funnel: {} },
+	},
+	{
+		label: "Loading",
+		dataState: loadingState,
+		display: { title: "Signup conversion" },
+	},
+	{
+		label: "Empty",
+		dataState: emptyState,
+		display: { title: "Signup conversion" },
+	},
+]
+
+// ---------------------------------------------------------------------------
 // Histogram
 // ---------------------------------------------------------------------------
 

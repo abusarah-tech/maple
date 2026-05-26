@@ -35,6 +35,13 @@ GROUP BY name
 ORDER BY value DESC
 LIMIT 8`
 
+const FUNNEL_TEMPLATE = `SELECT ServiceName AS name, count() AS value
+FROM service_overview_spans
+WHERE $__orgFilter AND $__timeFilter(Timestamp)
+GROUP BY name
+ORDER BY value DESC
+LIMIT 8`
+
 const HISTOGRAM_TEMPLATE = `SELECT Duration / 1000000 AS value
 FROM service_overview_spans
 WHERE $__orgFilter AND $__timeFilter(Timestamp)
@@ -55,6 +62,7 @@ export const RAW_SQL_TEMPLATES: Record<RawSqlDisplayType, string> = {
 	table: TABLE_TEMPLATE,
 	stat: STAT_TEMPLATE,
 	pie: PIE_TEMPLATE,
+	funnel: FUNNEL_TEMPLATE,
 	histogram: HISTOGRAM_TEMPLATE,
 	heatmap: HEATMAP_TEMPLATE,
 }
@@ -74,6 +82,8 @@ export function visualizationToDisplayType(
 			return "histogram"
 		case "heatmap":
 			return "heatmap"
+		case "funnel":
+			return "funnel"
 		case "chart":
 		default:
 			if (chartId?.includes("bar")) return "bar"

@@ -36,6 +36,7 @@ export function WidgetEditPanel({ widget, onUpdateDisplay, onUpdateDataSource }:
 	const isChart = widget.visualization === "chart"
 	const isMarkdown = widget.visualization === "markdown"
 	const isPie = widget.visualization === "pie"
+	const isFunnel = widget.visualization === "funnel"
 	const isHistogram = widget.visualization === "histogram"
 	const isHeatmap = widget.visualization === "heatmap"
 	const chartId = widget.display.chartId
@@ -128,6 +129,27 @@ export function WidgetEditPanel({ widget, onUpdateDisplay, onUpdateDataSource }:
 							}
 						/>
 						Show percentages
+					</label>
+				</div>
+			)}
+
+			{isFunnel && (
+				<div className="flex flex-col gap-1.5">
+					<label className="text-[10px] font-medium text-muted-foreground">Funnel style</label>
+					<label className="flex items-center gap-2 text-[10px]">
+						<input
+							type="checkbox"
+							checked={widget.display.funnel?.showStepPercent ?? false}
+							onChange={(e) =>
+								onUpdateDisplay({
+									funnel: {
+										...widget.display.funnel,
+										showStepPercent: e.target.checked,
+									},
+								})
+							}
+						/>
+						Show step conversion %
 					</label>
 				</div>
 			)}

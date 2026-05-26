@@ -58,9 +58,12 @@ export interface BaseChartProps {
 		colorScale?: "viridis" | "magma" | "cividis" | "blues" | "reds"
 		scaleType?: "linear" | "log"
 	}
+	funnel?: {
+		showStepPercent?: boolean
+	}
 }
 
-export type ChartCategory = "bar" | "area" | "line" | "pie" | "histogram" | "heatmap"
+export type ChartCategory = "bar" | "area" | "line" | "pie" | "histogram" | "heatmap" | "funnel"
 
 export interface ChartRegistryEntry {
 	id: string

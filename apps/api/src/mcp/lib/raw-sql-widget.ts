@@ -31,6 +31,8 @@ export function visualizationToDisplayType(
 			return "histogram"
 		case "heatmap":
 			return "heatmap"
+		case "funnel":
+			return "funnel"
 		default:
 			if (chartId?.includes("bar")) return "bar"
 			if (chartId?.includes("area")) return "area"

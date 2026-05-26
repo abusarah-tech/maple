@@ -396,6 +396,67 @@ export const piePresets: WidgetPresetDefinition[] = [
 	},
 ]
 
+export const funnelPresets: WidgetPresetDefinition[] = [
+	{
+		id: "funnel-traces-by-service",
+		name: "Traces by Service",
+		description: "Trace volume per service as a descending funnel",
+		icon: PulseIcon,
+		visualization: "funnel",
+		dataSource: {
+			endpoint: "custom_query_builder_breakdown",
+			params: {
+				queries: [
+					buildBreakdownQuery(0, {
+						dataSource: "traces",
+						whereClause: "root_only = true",
+						aggregation: "count",
+						groupBy: ["service_name"],
+					}),
+				],
+				formulas: [],
+				comparison: { mode: "none", includePercentChange: false },
+				debug: false,
+			},
+		},
+		display: {
+			title: "Traces by Service",
+			chartId: "query-builder-funnel",
+			unit: "number",
+			funnel: { showStepPercent: true },
+		},
+	},
+	{
+		id: "funnel-errors-by-service",
+		name: "Errors by Service",
+		description: "Error volume per service ranked as a funnel",
+		icon: AlertWarningIcon,
+		visualization: "funnel",
+		dataSource: {
+			endpoint: "custom_query_builder_breakdown",
+			params: {
+				queries: [
+					buildBreakdownQuery(0, {
+						dataSource: "traces",
+						whereClause: "has_error = true",
+						aggregation: "count",
+						groupBy: ["service_name"],
+					}),
+				],
+				formulas: [],
+				comparison: { mode: "none", includePercentChange: false },
+				debug: false,
+			},
+		},
+		display: {
+			title: "Errors by Service",
+			chartId: "query-builder-funnel",
+			unit: "number",
+			funnel: { showStepPercent: false },
+		},
+	},
+]
+
 export const histogramPresets: WidgetPresetDefinition[] = [
 	{
 		id: "histogram-trace-duration",

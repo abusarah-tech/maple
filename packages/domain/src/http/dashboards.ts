@@ -155,6 +155,13 @@ export const WidgetDisplayConfigSchema = Schema.Struct({
 		}),
 	),
 
+	// Funnel-specific
+	funnel: Schema.optional(
+		Schema.Struct({
+			showStepPercent: Schema.optional(Schema.Boolean),
+		}),
+	),
+
 	// Histogram-specific
 	histogram: Schema.optional(
 		Schema.Struct({

@@ -6,6 +6,13 @@ export const pieSampleData = [
 	{ name: "billing-service", value: 540 },
 ]
 
+export const funnelSampleData = [
+	{ name: "Visited", value: 4820 },
+	{ name: "Signed up", value: 2110 },
+	{ name: "Activated", value: 940 },
+	{ name: "Converted", value: 360 },
+]
+
 export const histogramSampleData = [
 	{ name: "0-50", value: 12 },
 	{ name: "50-100", value: 41 },

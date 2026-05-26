@@ -97,6 +97,7 @@ export type VisualizationType =
 	| "pie"
 	| "histogram"
 	| "heatmap"
+	| "funnel"
 	| "markdown"
 	| (string & {})
 export type WidgetMode = "view" | "edit"

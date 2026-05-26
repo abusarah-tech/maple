@@ -157,6 +157,19 @@ function renderVariant(variant: ChartSkeletonVariant) {
 				</div>
 			)
 
+		case "funnel":
+			return (
+				<div className="flex h-full w-full flex-col justify-center gap-2 p-3">
+					{[96, 64, 38, 18].map((w, i) => (
+						<div
+							key={i}
+							className="h-2.5 rounded-[3px] bg-foreground/10 skeleton-bar"
+							style={{ width: `${w}%`, animationDelay: `${-i * 0.13}s` }}
+						/>
+					))}
+				</div>
+			)
+
 		case "pie":
 			return (
 				<svg

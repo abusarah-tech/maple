@@ -12,6 +12,7 @@ describe("visualizationToDisplayType", () => {
 		expect(visualizationToDisplayType("pie")).toBe("pie")
 		expect(visualizationToDisplayType("histogram")).toBe("histogram")
 		expect(visualizationToDisplayType("heatmap")).toBe("heatmap")
+		expect(visualizationToDisplayType("funnel")).toBe("funnel")
 	})
 
 	it("derives line/area/bar for chart based on chartId hint", () => {

@@ -17,6 +17,7 @@ import { GaugeWidget } from "@/components/dashboard-builder/widgets/gauge-widget
 import { TableWidget } from "@/components/dashboard-builder/widgets/table-widget"
 import { ListWidget } from "@/components/dashboard-builder/widgets/list-widget"
 import { PieWidget } from "@/components/dashboard-builder/widgets/pie-widget"
+import { FunnelWidget } from "@/components/dashboard-builder/widgets/funnel-widget"
 import { HistogramWidget } from "@/components/dashboard-builder/widgets/histogram-widget"
 import { HeatmapWidget } from "@/components/dashboard-builder/widgets/heatmap-widget"
 import { MarkdownWidget } from "@/components/dashboard-builder/widgets/markdown-widget"
@@ -30,6 +31,7 @@ import {
 	tableScenarios,
 	listScenarios,
 	pieScenarios,
+	funnelScenarios,
 	histogramScenarios,
 	heatmapScenarios,
 	markdownScenarios,
@@ -97,6 +99,7 @@ const NAV_ITEMS = [
 	{ id: "table", label: "Table" },
 	{ id: "list", label: "List" },
 	{ id: "pie", label: "Pie" },
+	{ id: "funnel", label: "Funnel" },
 	{ id: "histogram", label: "Histogram" },
 	{ id: "heatmap", label: "Heatmap" },
 	{ id: "markdown", label: "Markdown" },
@@ -217,6 +220,16 @@ export function WidgetLab() {
 				>
 					{pieScenarios.map((s, i) => (
 						<PieScenarioCard key={`pie-${i}`} scenario={s} mode={mode} />
+					))}
+				</Section>
+
+				<Section
+					id="funnel"
+					title="Funnel"
+					description="Stage-by-stage drop-off as descending bars. Polish: % of first vs step conversion, long stage labels, single-stage and empty states."
+				>
+					{funnelScenarios.map((s, i) => (
+						<FunnelScenarioCard key={`funnel-${i}`} scenario={s} mode={mode} />
 					))}
 				</Section>
 
@@ -365,6 +378,19 @@ function PieScenarioCard({ scenario, mode }: { scenario: WidgetScenario; mode: W
 	return (
 		<ScenarioCell label={scenario.label}>
 			<PieWidget dataState={scenario.dataState} display={scenario.display} mode={mode} {...handlers} />
+		</ScenarioCell>
+	)
+}
+
+function FunnelScenarioCard({ scenario, mode }: { scenario: WidgetScenario; mode: WidgetMode }) {
+	return (
+		<ScenarioCell label={scenario.label}>
+			<FunnelWidget
+				dataState={scenario.dataState}
+				display={scenario.display}
+				mode={mode}
+				{...handlers}
+			/>
 		</ScenarioCell>
 	)
 }

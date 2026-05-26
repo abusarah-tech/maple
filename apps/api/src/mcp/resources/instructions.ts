@@ -176,6 +176,16 @@ The renderer is opinionated about column names. Get these wrong and the chart sh
   LIMIT 8
   \`\`\`
 
+- **funnel** — SELECT a \`name\` (string stage label) column plus a numeric column (first numeric wins as the value). Rows render top-to-bottom in the order returned as descending bars; each stage shows its value, share of the first stage, and step-to-step conversion. \`ORDER BY value DESC\` for a classic ranked funnel, or keep your own logical stage order for a conversion funnel. Cap to ≤ ~8 stages.
+  \`\`\`sql
+  SELECT ServiceName AS name, count() AS value
+  FROM service_overview_spans
+  WHERE $__orgFilter AND $__timeFilter(Timestamp)
+  GROUP BY name
+  ORDER BY value DESC
+  LIMIT 8
+  \`\`\`
+
 - **heatmap** — SELECT three columns aliased \`x\`, \`y\`, \`value\`. Cast \`x\`/\`y\` to strings if they're numeric (the renderer treats them as labels).
   \`\`\`sql
   SELECT ServiceName AS x,
