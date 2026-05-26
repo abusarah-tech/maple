@@ -22,7 +22,7 @@ import { Result, useAtomValue } from "@/lib/effect-atom"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import { ingestUrl } from "@/lib/services/common/ingest-url"
 
-const ONBOARD_SKILL_COMMAND = "bunx skill add Makisuo/maple/skill/maple-onboard"
+const ONBOARD_SKILL_COMMAND = "bunx skills add Makisuo/maple/skills/maple-onboard"
 
 function maskKey(key: string): string {
 	if (key.length <= 18) return key
