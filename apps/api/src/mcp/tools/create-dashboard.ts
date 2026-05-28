@@ -435,10 +435,11 @@ export function registerCreateDashboardTool(server: McpToolRegistrar) {
 				portable = yield* Effect.try({
 					try: () => {
 						const built = template.build(templateParams)
+						const description = params.description ?? built.description
 						return new PortableDashboardDocument({
 							name: params.name || built.name,
-							description: params.description ?? built.description,
-							tags: built.tags,
+							...(description && { description }),
+							...(built.tags && { tags: built.tags }),
 							timeRange: built.timeRange,
 							widgets: built.widgets,
 						})
