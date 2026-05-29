@@ -76,7 +76,14 @@ function ClerkReverseRedirects() {
 		}),
 	})
 	const { isSignedIn, orgId } = useAuth()
-	const { data: customer, isLoading: isCustomerLoading, error: customerError } = useCustomer()
+	// Autumn customers are keyed by orgId, so getOrCreateCustomer can only
+	// succeed once an org is active. Skip the fetch for signed-out/org-less
+	// onboarding sessions (e.g. /sign-up, /org-required) to avoid guaranteed 401s.
+	const {
+		data: customer,
+		isLoading: isCustomerLoading,
+		error: customerError,
+	} = useCustomer({ queryOptions: { enabled: Boolean(isSignedIn && orgId) } })
 
 	const redirectUrl = pathname + (searchStr ?? "")
 	const selectedPlan = hasSelectedPlan(customer)

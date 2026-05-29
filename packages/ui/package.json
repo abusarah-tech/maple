@@ -17,7 +17,6 @@
 		"@xyflow/react": "catalog:ui",
 		"class-variance-authority": "catalog:ui",
 		"clsx": "catalog:ui",
-		"cmdk": "^1.1.1",
 		"effect": "catalog:effect",
 		"embla-carousel-react": "^8.6.0",
 		"input-otp": "^1.4.2",
@@ -26,8 +25,7 @@
 		"react-resizable-panels": "^4.9.0",
 		"recharts": "catalog:ui",
 		"sonner": "^2.0.7",
-		"tailwind-merge": "catalog:tailwind",
-		"vaul": "^1.1.2"
+		"tailwind-merge": "catalog:tailwind"
 	},
 	"devDependencies": {
 		"@types/react": "catalog:react",

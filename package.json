@@ -22,20 +22,22 @@
 		"test": "turbo test",
 		"tinybird:manifest": "bun run ./scripts/generate-tinybird-project-manifest.ts",
 		"tinybird:manifest:check": "bun run ./scripts/generate-tinybird-project-manifest.ts --check",
-		"clickhouse:schema": "bun run ./scripts/generate-clickhouse-schema.ts && bun run ./scripts/lint-clickhouse-schema.ts",
-		"clickhouse:schema:check": "bun run ./scripts/generate-clickhouse-schema.ts --check && bun run ./scripts/lint-clickhouse-schema.ts",
+		"clickhouse:schema": "bun run ./scripts/generate-clickhouse-schema.ts && bun run ./scripts/generate-clickhouse-schema-sql.ts && bun run ./scripts/lint-clickhouse-schema.ts",
+		"clickhouse:schema:check": "bun run ./scripts/generate-clickhouse-schema.ts --check && bun run ./scripts/generate-clickhouse-schema-sql.ts --check && bun run ./scripts/lint-clickhouse-schema.ts",
 		"clickhouse:schema:lint": "bun run ./scripts/lint-clickhouse-schema.ts",
+		"knip": "knip",
+		"knip:fix": "knip --fix --allow-remove-files",
 		"typecheck": "turbo typecheck"
 	},
 	"dependencies": {},
 	"devDependencies": {
 		"@cloudflare/workers-types": "4.20260414.1",
 		"@effect/vitest": "4.0.0-beta.70",
-		"@maple/db": "workspace:*",
 		"@maple/infra": "workspace:*",
 		"@tinybirdco/sdk": "catalog:tinybird",
 		"@types/node": "catalog:tooling",
 		"alchemy": "^0.91.2",
+		"knip": "^6.14.2",
 		"oxfmt": "^0.47.0",
 		"oxlint": "^1.62.0",
 		"portless": "^0.13.0",
@@ -54,7 +56,6 @@
 		"effect": {
 			"@effect/atom-react": "4.0.0-beta.70",
 			"@effect/language-service": "^0.85.1",
-			"@effect/opentelemetry": "4.0.0-beta.70",
 			"@effect/platform-bun": "4.0.0-beta.70",
 			"effect": "4.0.0-beta.70"
 		},
