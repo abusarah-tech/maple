@@ -1447,7 +1447,16 @@ async fn handle_replay_meta_inner(
 
     // NDJSON: one session-metadata object per line. The org_id is always taken
     // from the authenticated key, never from the client-supplied body.
+    //
+    // Count session-start rows so we can meter one browser session per session to
+    // Autumn. The browser SDK posts a start row (`version: 1` / `status: "active"`)
+    // at session start and an end row (`version: 2`) at unload; counting only starts
+    // avoids double-counting. Caveat: an in-tab reload recreates the SDK session sink
+    // and re-posts a start row for the same SessionId, so reloads can slightly
+    // over-count — consistent with the at-least-once metering used for the
+    // logs/traces/metrics signals.
     let mut rows: Vec<Vec<u8>> = Vec::new();
+    let mut session_starts: u64 = 0;
     for line in body.split(|&b| b == b'\n') {
         if line.iter().all(u8::is_ascii_whitespace) {
             continue;
@@ -1461,6 +1470,9 @@ async fn handle_replay_meta_inner(
             "org_id".to_string(),
             serde_json::Value::String(org_id.clone()),
         );
+        if obj.get("version").and_then(|v| v.as_u64()) == Some(1) {
+            session_starts += 1;
+        }
         rows.push(
             serde_json::to_vec(&value)
                 .map_err(|e| ApiError::bad_request(format!("failed to re-serialize metadata: {e}")))?,
@@ -1481,6 +1493,16 @@ async fn handle_replay_meta_inner(
         .map_err(|e| {
             ApiError::service_unavailable(format!("failed to enqueue session metadata: {e}"))
         })?;
+
+    // Meter browser sessions to Autumn after the rows are safely enqueued, mirroring
+    // the logs/traces/metrics path (which only tracks on success). Skip the internal
+    // sentinel org so self-observability traffic is not billed.
+    if let Some(tracker) = &state.autumn_tracker {
+        if org_id != SENTINEL_ORG_ID && session_starts > 0 {
+            tracker.track(&org_id, "browser_sessions", session_starts as f64);
+        }
+    }
+
     Ok(count)
 }
 

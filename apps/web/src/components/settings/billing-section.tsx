@@ -107,7 +107,7 @@ function SubscriptionStrip({ billingPeriodLabel }: { billingPeriodLabel: string 
 function UsageSkeleton() {
 	return (
 		<div className="space-y-4">
-			{Array.from({ length: 3 }).map((_, i) => (
+			{Array.from({ length: 4 }).map((_, i) => (
 				<div key={i} className="flex flex-col gap-2">
 					<div className="flex items-center gap-2">
 						<Skeleton className="h-3 w-3 rounded-sm" />
@@ -124,7 +124,7 @@ function UsageSkeleton() {
 export function BillingSection() {
 	const { data: customer, isLoading: isCustomerLoading } = useCustomer()
 	const { total, isLoading: isUsageLoading } = useAggregateEvents({
-		featureId: ["logs", "traces", "metrics"],
+		featureId: ["logs", "traces", "metrics", "browser_sessions"],
 		range: "1bc",
 	})
 
@@ -147,6 +147,7 @@ export function BillingSection() {
 		logsGB: total?.logs?.sum ?? 0,
 		tracesGB: total?.traces?.sum ?? 0,
 		metricsGB: total?.metrics?.sum ?? 0,
+		browserSessions: total?.browser_sessions?.sum ?? 0,
 	}
 
 	return (

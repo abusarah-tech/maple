@@ -22,6 +22,13 @@ export const traces = feature({
 	consumable: true,
 })
 
+export const browserSessions = feature({
+	id: "browser_sessions",
+	name: "Browser Sessions",
+	type: "metered",
+	consumable: true,
+})
+
 export const aiInputTokens = feature({
 	id: "ai_input_tokens",
 	name: "AI Input Tokens",

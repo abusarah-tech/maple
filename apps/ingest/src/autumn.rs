@@ -12,7 +12,9 @@ use uuid::Uuid;
 pub struct UsageEvent {
     pub org_id: String,
     pub feature_id: &'static str,
-    pub value_gb: f64,
+    /// Quantity to bill for this event. Unit depends on `feature_id`: GB for
+    /// `logs`/`traces`/`metrics`, a raw count for `browser_sessions`.
+    pub value: f64,
 }
 
 #[derive(Clone)]
@@ -44,11 +46,11 @@ impl AutumnTracker {
         Self { tx }
     }
 
-    pub fn track(&self, org_id: &str, feature_id: &'static str, value_gb: f64) {
+    pub fn track(&self, org_id: &str, feature_id: &'static str, value: f64) {
         let _ = self.tx.send(UsageEvent {
             org_id: org_id.to_string(),
             feature_id,
-            value_gb,
+            value,
         });
     }
 }
@@ -87,11 +89,11 @@ async fn flush_loop(
 
                 let mut flushed_keys: Vec<AccumulatorKey> = Vec::new();
 
-                for ((org_id, feature_id), value_gb) in &entries {
+                for ((org_id, feature_id), value) in &entries {
                     let body = TrackRequest {
                         customer_id: org_id,
                         feature_id,
-                        value: *value_gb,
+                        value: *value,
                         idempotency_key: Uuid::new_v4().to_string(),
                     };
 
@@ -155,7 +157,9 @@ async fn flush_loop(
                     }
                 }
 
-                // Update pending gauge
+                // Update pending gauge. Note: this now sums mixed units across
+                // features (GB for logs/traces/metrics, counts for browser_sessions);
+                // the metric name is kept as-is to avoid breaking existing dashboards.
                 let total_pending: f64 = accumulator.values().sum();
                 metrics::autumn_pending_gb(total_pending);
             }
@@ -165,7 +169,7 @@ async fn flush_loop(
                     Some(event) => {
                         *accumulator
                             .entry((event.org_id, event.feature_id))
-                            .or_insert(0.0) += event.value_gb;
+                            .or_insert(0.0) += event.value;
                     }
                     None => {
                         // Channel closed, do a final flush attempt
@@ -195,11 +199,11 @@ async fn flush_all(
         .map(|(k, v)| (k.clone(), *v))
         .collect();
 
-    for ((org_id, feature_id), value_gb) in &entries {
+    for ((org_id, feature_id), value) in &entries {
         let body = TrackRequest {
             customer_id: org_id,
             feature_id,
-            value: *value_gb,
+            value: *value,
             idempotency_key: Uuid::new_v4().to_string(),
         };
 
