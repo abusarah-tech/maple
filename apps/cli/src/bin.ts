@@ -6,6 +6,7 @@ import * as Command from "effect/unstable/cli/Command"
 import { cli } from "./cli"
 import { MapleConfig } from "./core/config"
 import { Mode } from "./core/mode"
+import { TelemetryLayer } from "./core/telemetry"
 import { maybeNotifyUpdate } from "./core/update"
 import { WarehouseExecutorFromMode } from "./core/warehouse"
 import { MAPLE_VERSION } from "./version"
@@ -23,8 +24,17 @@ const MainLayer = WarehouseExecutorFromMode.pipe(
 // Throttled, non-blocking "update available" notice before dispatching the
 // command. It never fails and short-circuits to a cached decision on most runs
 // (network is hit at most once per 24h), so the latency cost is negligible.
+//
+// `cli.argv` records the sub-command + flags so one root span per invocation
+// ties a command to the warehouse queries it runs. TelemetryLayer is provided
+// OUTERMOST (after MainLayer), not merged into it: the OTLP tracer's batch
+// exporter flushes when its layer scope closes, and only the outermost provide's
+// scope is the runtime's main scope that `BunRuntime.runMain` closes on exit.
+// Merging it into MainLayer leaves spans unflushed for short-lived commands.
 maybeNotifyUpdate.pipe(
 	Effect.flatMap(() => Command.run(cli, { version: MAPLE_VERSION })),
+	Effect.withSpan("maple", { attributes: { "cli.argv": process.argv.slice(2).join(" ") } }),
 	Effect.provide(MainLayer),
+	Effect.provide(TelemetryLayer),
 	BunRuntime.runMain,
 )

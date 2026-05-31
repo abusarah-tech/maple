@@ -12,6 +12,7 @@
 	},
 	"dependencies": {
 		"@effect/platform-bun": "catalog:effect",
+		"@maple-dev/effect-sdk": "workspace:*",
 		"@maple/domain": "workspace:*",
 		"@maple/query-engine": "workspace:*",
 		"effect": "catalog:effect",

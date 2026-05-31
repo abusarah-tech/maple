@@ -23,6 +23,10 @@ const toObservabilityError = (pipe: string | undefined) => (error: unknown) =>
 		...(pipe ? { pipe } : {}),
 	})
 
+// Cap `db.statement` at 16 KB to match apps/api's WarehouseQueryService span.
+const MAX_DB_STATEMENT = 16 * 1024
+const truncateSql = (sql: string) => (sql.length > MAX_DB_STATEMENT ? sql.slice(0, MAX_DB_STATEMENT) : sql)
+
 /**
  * A `WarehouseExecutor` shape backed by the local Maple binary's `/local/query`
  * endpoint. Both executor methods reduce to raw SQL against the embedded chDB:
@@ -48,11 +52,31 @@ export const makeLocalWarehouseExecutorShape = (baseUrl: string): WarehouseExecu
 	}
 	return {
 		orgId: LOCAL_ORG_ID,
-		sqlQuery: <T = Record<string, unknown>>(sql: string, _options?: ExecutorQueryOptions) =>
-			Effect.tryPromise({
-				try: () => exec<T>(sql, "sqlQuery"),
-				catch: toObservabilityError(undefined),
-			}),
+		sqlQuery: <T = Record<string, unknown>>(sql: string, options?: ExecutorQueryOptions) =>
+			Effect.gen(function* () {
+				const started = performance.now()
+				const rows = yield* Effect.tryPromise({
+					try: () => exec<T>(sql, "sqlQuery"),
+					catch: toObservabilityError(undefined),
+				})
+				yield* Effect.annotateCurrentSpan({
+					"db.duration_ms": Math.round(performance.now() - started),
+					"result.rowCount": rows.length,
+				})
+				return rows
+			}).pipe(
+				Effect.withSpan("warehouse.sqlQuery", {
+					kind: "client",
+					attributes: {
+						"db.system": "clickhouse",
+						"peer.service": "chdb",
+						"db.statement": truncateSql(sql),
+						"db.statement.length": sql.length,
+						"query.context": "sqlQuery",
+						...(options?.profile ? { "query.profile": options.profile } : {}),
+					},
+				}),
+			),
 		query: <T>(pipe: string, params: Record<string, unknown>, _options?: ExecutorQueryOptions) =>
 			Effect.gen(function* () {
 				const compiled = compilePipeQuery(pipe, { ...params, org_id: LOCAL_ORG_ID })
@@ -62,13 +86,31 @@ export const makeLocalWarehouseExecutorShape = (baseUrl: string): WarehouseExecu
 						pipe,
 					})
 				}
+				yield* Effect.annotateCurrentSpan({
+					"db.statement": truncateSql(compiled.sql),
+					"db.statement.length": compiled.sql.length,
+				})
+				const started = performance.now()
 				const rows = yield* Effect.tryPromise({
 					try: () => exec<Record<string, unknown>>(compiled.sql, pipe),
 					catch: toObservabilityError(pipe),
 				})
+				yield* Effect.annotateCurrentSpan({
+					"db.duration_ms": Math.round(performance.now() - started),
+					"result.rowCount": rows.length,
+				})
 				// Type-erased executor boundary — mirrors WarehouseExecutorLive in apps/api.
 				return { data: compiled.castRows(rows) as unknown as ReadonlyArray<T> }
-			}),
+			}).pipe(
+				Effect.withSpan("warehouse.query", {
+					kind: "client",
+					attributes: {
+						"db.system": "clickhouse",
+						"peer.service": "chdb",
+						"query.context": pipe,
+					},
+				}),
+			),
 	}
 }
 

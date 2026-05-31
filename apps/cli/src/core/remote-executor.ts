@@ -60,7 +60,19 @@ export const makeRemoteWarehouseExecutorShape = (
 						message: error instanceof Error ? error.message : String(error),
 						pipe,
 					}),
-			}),
+			}).pipe(
+				Effect.tap((result) =>
+					Effect.annotateCurrentSpan({ "result.rowCount": result.data.length }),
+				),
+				Effect.withSpan("warehouse.query", {
+					kind: "client",
+					attributes: {
+						"peer.service": "maple-api",
+						"db.system": "clickhouse",
+						"query.context": pipe,
+					},
+				}),
+			),
 		sqlQuery: <T = Record<string, unknown>>(_sql: string, _options?: ExecutorQueryOptions) =>
 			Effect.fail(
 				new ObservabilityError({ message: RAW_SQL_REMOTE_MESSAGE, category: "client" }),

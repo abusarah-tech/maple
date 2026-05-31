@@ -3,7 +3,9 @@
 // `apps/ingest/src/bin/local.rs`. `maple start` calls `startServer`.
 
 import { Effect, type Scope } from "effect"
+import * as ManagedRuntime from "effect/ManagedRuntime"
 import { gunzipSync } from "node:zlib"
+import { TelemetryLayer } from "../core/telemetry"
 import { acquireChdb, type Chdb, type ChdbError } from "./chdb"
 import { buildInsertSql } from "./inserts"
 import { encodeLogs, encodeMetrics, encodeTraces, type EncodedBatch } from "./otlp/encode"
@@ -78,21 +80,28 @@ function encodeFor(signal: Signal, req: unknown): EncodedBatch[] {
 	}
 }
 
-async function ingest(db: Chdb, signal: Signal, req: Request): Promise<Response> {
+interface IngestResult {
+	readonly response: Response
+	readonly accepted: number
+	readonly requestBytes: number
+}
+
+async function ingest(db: Chdb, signal: Signal, req: Request): Promise<IngestResult> {
 	const raw = new Uint8Array(await req.arrayBuffer())
+	const requestBytes = raw.length
 	const contentType = req.headers.get("content-type") ?? ""
 	const contentEncoding = req.headers.get("content-encoding")
 	let decoded: unknown
 	try {
 		decoded = decodeOtlp(signal, raw, contentType, contentEncoding)
 	} catch (error) {
-		return text(`decode ${signal}: ${(error as Error).message}`, 400)
+		return { response: text(`decode ${signal}: ${(error as Error).message}`, 400), accepted: 0, requestBytes }
 	}
 	let batches: EncodedBatch[]
 	try {
 		batches = encodeFor(signal, decoded)
 	} catch (error) {
-		return text(`encode ${signal}: ${(error as Error).message}`, 500)
+		return { response: text(`encode ${signal}: ${(error as Error).message}`, 500), accepted: 0, requestBytes }
 	}
 	let accepted = 0
 	for (const batch of batches) {
@@ -100,11 +109,15 @@ async function ingest(db: Chdb, signal: Signal, req: Request): Promise<Response>
 		try {
 			db.exec(buildInsertSql(batch.datasource, batch.ndjson))
 		} catch (error) {
-			return text(`chDB insert (${batch.datasource}): ${(error as Error).message}`, 500)
+			return {
+				response: text(`chDB insert (${batch.datasource}): ${(error as Error).message}`, 500),
+				accepted,
+				requestBytes,
+			}
 		}
 		accepted += batch.rowCount
 	}
-	return json({ accepted })
+	return { response: json({ accepted }), accepted, requestBytes }
 }
 
 /**
@@ -129,25 +142,40 @@ export function forceJsonEachRow(sql: string): string {
 	return `${s}\nFORMAT JSONEachRow`
 }
 
-async function handleQuery(db: Chdb, req: Request): Promise<Response> {
+interface QueryResult {
+	readonly response: Response
+	readonly rowCount: number
+	readonly durationMs: number
+	readonly sql: string | undefined
+}
+
+async function handleQuery(db: Chdb, req: Request): Promise<QueryResult> {
 	let sql: string
 	try {
 		const body = (await req.json()) as { sql?: unknown }
-		if (typeof body.sql !== "string") return text("missing 'sql' string", 400)
+		if (typeof body.sql !== "string")
+			return { response: text("missing 'sql' string", 400), rowCount: 0, durationMs: 0, sql: undefined }
 		sql = body.sql
 	} catch {
-		return text("invalid JSON body", 400)
+		return { response: text("invalid JSON body", 400), rowCount: 0, durationMs: 0, sql: undefined }
 	}
 	let out: string
+	const started = performance.now()
 	try {
 		out = db.query(forceJsonEachRow(sql))
 	} catch (error) {
-		return text(`query failed: ${(error as Error).message}`, 500)
+		return {
+			response: text(`query failed: ${(error as Error).message}`, 500),
+			rowCount: 0,
+			durationMs: Math.round(performance.now() - started),
+			sql,
+		}
 	}
+	const durationMs = Math.round(performance.now() - started)
 	// chDB returns JSONEachRow (one JSON object per line). Wrap the lines into a
 	// JSON array without re-parsing each row.
 	const rows = out.split("\n").map((l) => l.trim()).filter((l) => l.length > 0)
-	return text(`[${rows.join(",")}]`, 200, "application/json")
+	return { response: text(`[${rows.join(",")}]`, 200, "application/json"), rowCount: rows.length, durationMs, sql }
 }
 
 function serveAsset(assets: AssetResolver, pathname: string): Response {
@@ -160,19 +188,94 @@ function serveAsset(assets: AssetResolver, pathname: string): Response {
 	return text("UI not built", 404)
 }
 
-/** The `Bun.serve` fetch handler, closed over the chDB connection. Request
- *  handling stays synchronous chDB work — only the server lifecycle is Effect. */
+// Cap `db.statement` at 16 KB to match apps/api's WarehouseQueryService span.
+const MAX_DB_STATEMENT = 16 * 1024
+const truncateSql = (sql: string) => (sql.length > MAX_DB_STATEMENT ? sql.slice(0, MAX_DB_STATEMENT) : sql)
+
+/** Runs a request's span effect on the server's tracing runtime (see
+ *  `startServer`). The effect always succeeds with a `Response`. */
+type SpanRunner = <A>(effect: Effect.Effect<A>) => Promise<A>
+
+// The Effect tracer derives span status from the effect's outcome — success →
+// `Ok`, failure → `Error` (conventions say never set the status string by hand
+// in TS). So to mark a 4xx/5xx span `Error`, we fail *inside* the span with the
+// Response as the error, then recover it to success with `Effect.match`
+// *outside* the span — the span has already closed `Error` by then.
+const failIfError = (response: Response): Effect.Effect<Response, Response> =>
+	Effect.gen(function* () {
+		if (response.status >= 400) {
+			yield* Effect.annotateCurrentSpan({ "error.type": `HTTP ${response.status}` })
+			return yield* Effect.fail(response)
+		}
+		return response
+	})
+
+const recoverResponse = (self: Effect.Effect<Response, Response>): Effect.Effect<Response> =>
+	Effect.match(self, { onFailure: (r) => r, onSuccess: (r) => r })
+
+/** OTLP-ingest request as a `Server`-kind span, mirroring the Rust gateway
+ *  (`apps/ingest`): `maple.signal`, item count, request size, HTTP semconv. */
+const ingestSpan = (runSpan: SpanRunner, db: Chdb, signal: Signal, req: Request): Promise<Response> =>
+	runSpan(
+		recoverResponse(
+			Effect.gen(function* () {
+				const { response, accepted, requestBytes } = yield* Effect.promise(() => ingest(db, signal, req))
+				yield* Effect.annotateCurrentSpan({
+					"http.request.body.size": requestBytes,
+					"maple.ingest.item_count": accepted,
+					"http.response.status_code": response.status,
+				})
+				return yield* failIfError(response)
+			}).pipe(
+				Effect.withSpan(`POST /v1/${signal}`, {
+					kind: "server",
+					attributes: {
+						"maple.signal": signal,
+						"http.request.method": "POST",
+						"http.route": `/v1/${signal}`,
+					},
+				}),
+			),
+		),
+	)
+
+/** `/local/query` request as a `Server`-kind span with the canonical DB attrs. */
+const querySpan = (runSpan: SpanRunner, db: Chdb, req: Request): Promise<Response> =>
+	runSpan(
+		recoverResponse(
+			Effect.gen(function* () {
+				const { response, rowCount, durationMs, sql } = yield* Effect.promise(() => handleQuery(db, req))
+				yield* Effect.annotateCurrentSpan({
+					"db.system": "clickhouse",
+					"db.duration_ms": durationMs,
+					"result.rowCount": rowCount,
+					"http.response.status_code": response.status,
+					...(sql ? { "db.statement": truncateSql(sql), "db.statement.length": sql.length } : {}),
+				})
+				return yield* failIfError(response)
+			}).pipe(
+				Effect.withSpan("POST /local/query", {
+					kind: "server",
+					attributes: { "http.request.method": "POST", "http.route": "/local/query" },
+				}),
+			),
+		),
+	)
+
+/** The `Bun.serve` fetch handler, closed over the chDB connection. Each ingest
+ *  and query request is run through `runSpan` so it leaves a trace; `/health`
+ *  and `OPTIONS` are skipped (loop-prevention convention — no health-check noise). */
 const makeFetch =
-	(db: Chdb, options: ServerOptions) =>
+	(db: Chdb, options: ServerOptions, runSpan: SpanRunner) =>
 	async (req: Request): Promise<Response> => {
 		const url = new URL(req.url)
 		if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS })
 		if (url.pathname === "/health") return text("OK")
 		if (req.method === "POST") {
-			if (url.pathname === "/v1/traces") return ingest(db, "traces", req)
-			if (url.pathname === "/v1/logs") return ingest(db, "logs", req)
-			if (url.pathname === "/v1/metrics") return ingest(db, "metrics", req)
-			if (url.pathname === "/local/query") return handleQuery(db, req)
+			if (url.pathname === "/v1/traces") return ingestSpan(runSpan, db, "traces", req)
+			if (url.pathname === "/v1/logs") return ingestSpan(runSpan, db, "logs", req)
+			if (url.pathname === "/v1/metrics") return ingestSpan(runSpan, db, "metrics", req)
+			if (url.pathname === "/local/query") return querySpan(runSpan, db, req)
 		}
 		if (req.method === "GET" && options.assets) return serveAsset(options.assets, url.pathname)
 		return text("not found", 404)
@@ -188,8 +291,19 @@ export const startServer = (
 ): Effect.Effect<{ readonly port: number }, ChdbError, Scope.Scope> =>
 	Effect.gen(function* () {
 		const db = yield* acquireChdb({ dataDir: options.dataDir, schemaSql })
+		// A dedicated runtime carrying the OTel tracer for per-request spans: the
+		// Bun.serve handler runs outside Effect, so each request's span effect is
+		// run through this runtime. Disposed on scope close, which flushes any
+		// pending spans (bounded by the layer's shutdownTimeout).
+		const telemetry = yield* Effect.acquireRelease(
+			Effect.sync(() => ManagedRuntime.make(TelemetryLayer)),
+			(rt) => Effect.promise(() => rt.dispose()),
+		)
+		const runSpan: SpanRunner = (effect) => telemetry.runPromise(effect)
 		const server = yield* Effect.acquireRelease(
-			Effect.sync(() => Bun.serve({ port: options.port, hostname: "127.0.0.1", fetch: makeFetch(db, options) })),
+			Effect.sync(() =>
+				Bun.serve({ port: options.port, hostname: "127.0.0.1", fetch: makeFetch(db, options, runSpan) }),
+			),
 			(s) => Effect.sync(() => s.stop(true)),
 		)
 		return { port: server.port ?? options.port }
