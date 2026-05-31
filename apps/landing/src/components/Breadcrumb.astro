@@ -15,6 +15,7 @@ const locale = Astro.currentLocale ?? "en";
 const l = (path: string) => getRelativeLocaleUrl(locale, path);
 
 const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://maple.dev';
+const currentUrl = `${siteUrl}${Astro.url.pathname}`;
 
 const jsonLd = {
     "@context": "https://schema.org",
@@ -23,7 +24,7 @@ const jsonLd = {
         "@type": "ListItem",
         "position": index + 1,
         "name": item.label,
-        ...(item.href ? { "item": `${siteUrl}${l(item.href)}` } : {}),
+        "item": item.href ? `${siteUrl}${l(item.href)}` : currentUrl,
     })),
 };
 ---
