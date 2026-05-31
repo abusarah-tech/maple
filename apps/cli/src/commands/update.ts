@@ -5,8 +5,11 @@ import { fetchLatestTag, isNewer, performUpdate, stripV, UpdateError } from "../
 import { bold, cyan, dim, green } from "../lib/style"
 import { MAPLE_VERSION } from "../version"
 
-const versionFlag = Flag.optional(
-	Flag.string("version").pipe(
+// NB: this is named `--tag`, not `--version`: the CLI framework reserves a
+// global `--version` flag (prints the binary version and exits), so a
+// command-level `--version` would be shadowed and never reach the handler.
+const tagFlag = Flag.optional(
+	Flag.string("tag").pipe(
 		Flag.withDescription("Install a specific release tag instead of the latest (e.g. v0.6.0)"),
 	),
 )
@@ -16,13 +19,13 @@ const checkFlag = Flag.boolean("check").pipe(
 	Flag.withDefault(false),
 )
 
-export const update = Command.make("update", { version: versionFlag, check: checkFlag }).pipe(
+export const update = Command.make("update", { tag: tagFlag, check: checkFlag }).pipe(
 	Command.withDescription(
 		"Update the maple binary to the latest release (downloads, verifies the checksum, and installs in place)",
 	),
 	Command.withHandler(
 		Effect.fnUntraced(function* (a) {
-			const pinned = Option.getOrUndefined(a.version)
+			const pinned = Option.getOrUndefined(a.tag)
 			const current = MAPLE_VERSION
 
 			// Resolve the latest tag even when pinned isn't set, so we can compare.
@@ -55,7 +58,7 @@ export const update = Command.make("update", { version: versionFlag, check: chec
 				})
 			}
 
-			// No-op when already current (skipped for an explicit --version pin,
+			// No-op when already current (skipped for an explicit --tag pin,
 			// which may reinstall or downgrade to that exact tag).
 			if (!pinned && !isNewer(current, latestTag)) {
 				yield* Effect.sync(() =>

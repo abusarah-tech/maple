@@ -146,8 +146,11 @@ const downloadTo = (url: string, dest: string): Effect.Effect<void, UpdateError>
 		try: async () => {
 			const res = await fetch(url, { headers: { "User-Agent": "maple-cli" } })
 			if (!res.ok) throw new Error(`download failed (${res.status} ${res.statusText}) for ${url}`)
-			// Bun.write streams the response body straight to disk (the bundle is large).
-			await Bun.write(dest, res)
+			// NB: `Bun.write(dest, res)` (writing the Response directly) hangs
+			// indefinitely on GitHub's redirect-backed release-asset streams — it
+			// never resolves. Buffer the body first, then write the bytes.
+			const body = await res.arrayBuffer()
+			await Bun.write(dest, body)
 		},
 		catch: (e) => new UpdateError({ message: e instanceof Error ? e.message : String(e) }),
 	})

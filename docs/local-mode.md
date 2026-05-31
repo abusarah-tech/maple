@@ -64,8 +64,9 @@ Once installed, the binary keeps itself current:
   entry while the live process keeps its old inode). It then clears the macOS
   quarantine flag. Restart any running `maple start` afterward.
   - `maple update --check` — report current vs. latest without installing.
-  - `maple update --version <tag>` — install a specific release (e.g. `v0.6.0`);
-    also the way to downgrade.
+  - `maple update --tag <tag>` — install a specific release (e.g. `v0.6.0`); also
+    the way to downgrade. (Named `--tag`, not `--version`, because the CLI
+    reserves `--version` for printing the binary version.)
 
 This is the same artifact the installer fetches, so `maple update` and re-running
 `curl … | sh` are interchangeable.
