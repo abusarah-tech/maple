@@ -146,6 +146,10 @@ const CACHE_SNAP_S = 15
  * trade staleness for hit-rate.
  */
 export function snapToWindow(dateStr: string, windowSeconds: number): string {
+	// Defensive: a malformed/undefined timestamp must never crash the cache-key
+	// path (it would surface as an opaque TypeError inside EdgeCacheService.
+	// getOrCompute). Pass it through unchanged so the key stays deterministic.
+	if (typeof dateStr !== "string") return dateStr
 	if (dateStr.length !== 19 || dateStr[4] !== "-" || dateStr[10] !== " ") return dateStr
 	if (windowSeconds <= 0 || windowSeconds > 3600) return dateStr
 	// Snap by deriving epoch ms, flooring, formatting back. Handles cross-minute

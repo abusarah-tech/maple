@@ -24,6 +24,14 @@ describe("snapToWindow", () => {
 		expect(snapToWindow("2026-04-27T12:34:42", 15)).toBe("2026-04-27T12:34:42")
 	})
 
+	it("does not throw on a nullish timestamp (cache-key path must degrade, not crash)", () => {
+		// A request with an optional/undefined start or end time must not crash
+		// EdgeCacheService.getOrCompute with an opaque TypeError; pass it through.
+		expect(() => snapToWindow(undefined as unknown as string, 15)).not.toThrow()
+		expect(snapToWindow(undefined as unknown as string, 15)).toBeUndefined()
+		expect(snapToWindow(null as unknown as string, 15)).toBeNull()
+	})
+
 	it("returns input unchanged for invalid windows", () => {
 		expect(snapToWindow("2026-04-27 12:34:42", 0)).toBe("2026-04-27 12:34:42")
 		expect(snapToWindow("2026-04-27 12:34:42", -5)).toBe("2026-04-27 12:34:42")

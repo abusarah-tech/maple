@@ -2,7 +2,7 @@
 // SPA, all on one port, backed by an embedded chDB. Replaces the Rust
 // `apps/ingest/src/bin/local.rs`. `maple start` calls `startServer`.
 
-import { Effect, type Scope } from "effect"
+import { Effect, Schema, type Scope } from "effect"
 import * as ManagedRuntime from "effect/ManagedRuntime"
 import { gunzipSync } from "node:zlib"
 import { TelemetryLayer } from "../core/telemetry"
@@ -196,22 +196,37 @@ const truncateSql = (sql: string) => (sql.length > MAX_DB_STATEMENT ? sql.slice(
  *  `startServer`). The effect always succeeds with a `Response`. */
 type SpanRunner = <A>(effect: Effect.Effect<A>) => Promise<A>
 
+// A rejected (4xx/5xx) ingest/query response, surfaced through the Effect error
+// channel. `message` carries the handler's descriptive body so the span records
+// a real `exception.message`; `response` is the original, untouched response we
+// hand back to the client in `recoverResponse`. (Failing with a bare `Response`
+// recorded an empty `{}` — a `Response` has no enumerable own fields — which lost
+// the cause entirely and bucketed every failure under one "Error" fingerprint.)
+class IngestRejected extends Schema.TaggedErrorClass<IngestRejected>()("@maple/cli/IngestRejected", {
+	response: Schema.instanceOf(Response),
+	status: Schema.Number,
+	message: Schema.String,
+}) {}
+
 // The Effect tracer derives span status from the effect's outcome — success →
 // `Ok`, failure → `Error` (conventions say never set the status string by hand
-// in TS). So to mark a 4xx/5xx span `Error`, we fail *inside* the span with the
-// Response as the error, then recover it to success with `Effect.match`
-// *outside* the span — the span has already closed `Error` by then.
-const failIfError = (response: Response): Effect.Effect<Response, Response> =>
+// in TS). So to mark a 4xx/5xx span `Error`, we fail *inside* the span with an
+// `IngestRejected` carrying the reason, then recover the original response with
+// `Effect.match` *outside* the span — the span has already closed `Error` by then.
+const failIfError = (response: Response): Effect.Effect<Response, IngestRejected> =>
 	Effect.gen(function* () {
 		if (response.status >= 400) {
+			// Clone to read the body without consuming the response we return below.
+			const body = (yield* Effect.promise(() => response.clone().text())).trim()
+			const message = body.length > 0 ? body : `HTTP ${response.status}`
 			yield* Effect.annotateCurrentSpan({ "error.type": `HTTP ${response.status}` })
-			return yield* Effect.fail(response)
+			return yield* Effect.fail(new IngestRejected({ response, status: response.status, message }))
 		}
 		return response
 	})
 
-const recoverResponse = (self: Effect.Effect<Response, Response>): Effect.Effect<Response> =>
-	Effect.match(self, { onFailure: (r) => r, onSuccess: (r) => r })
+const recoverResponse = (self: Effect.Effect<Response, IngestRejected>): Effect.Effect<Response> =>
+	Effect.match(self, { onFailure: (error) => error.response, onSuccess: (response) => response })
 
 /** OTLP-ingest request as a `Server`-kind span, mirroring the Rust gateway
  *  (`apps/ingest`): `maple.signal`, item count, request size, HTTP semconv. */
