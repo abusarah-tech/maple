@@ -11,6 +11,12 @@ import {
 	CollapsibleContent,
 	CollapsibleTrigger,
 } from "@maple/ui/components/ui/collapsible"
+import {
+	InputGroup,
+	InputGroupAddon,
+	InputGroupButton,
+	InputGroupInput,
+} from "@maple/ui/components/ui/input-group"
 
 export interface FilterOption {
 	name: string
@@ -78,35 +84,34 @@ function FilterSectionBase({
 			</CollapsibleTrigger>
 			<CollapsibleContent className="pb-3">
 				{searchable && (
-					<div className="relative mb-2 px-px">
-						<MagnifierIcon
-							strokeWidth={2}
-							className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-						/>
-						<input
+					<InputGroup className="mb-2">
+						<InputGroupAddon>
+							<MagnifierIcon />
+						</InputGroupAddon>
+						<InputGroupInput
 							ref={inputRef}
-							type="text"
+							size="sm"
 							value={searchText}
 							onChange={(e) => {
 								setSearchText(e.target.value)
 								setShowAll(false)
 							}}
 							placeholder={`Search ${title.toLowerCase()}...`}
-							className="h-7 w-full rounded-md border border-input bg-background pl-7 pr-7 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 						/>
 						{searchText && (
-							<button
-								type="button"
-								onClick={() => {
-									setSearchText("")
-									inputRef.current?.focus()
-								}}
-								className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
-							>
-								<XmarkIcon strokeWidth={2} className="size-3" />
-							</button>
+							<InputGroupAddon align="inline-end">
+								<InputGroupButton
+									aria-label="Clear search"
+									onClick={() => {
+										setSearchText("")
+										inputRef.current?.focus()
+									}}
+								>
+									<XmarkIcon />
+								</InputGroupButton>
+							</InputGroupAddon>
 						)}
-					</div>
+					</InputGroup>
 				)}
 				<div className="space-y-2">
 					{visibleOptions.length === 0 ? (

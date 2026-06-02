@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
 import { MagnifierIcon, XmarkIcon } from "@/components/icons"
+import {
+	InputGroup,
+	InputGroupAddon,
+	InputGroupButton,
+	InputGroupInput,
+} from "@maple/ui/components/ui/input-group"
 import { cn } from "@maple/ui/utils"
 
 interface ReplaysToolbarProps {
@@ -43,29 +49,23 @@ export function ReplaysToolbar({
 
 	return (
 		<div className="flex flex-wrap items-center justify-between gap-3">
-			<div className="relative w-full max-w-sm">
-				<MagnifierIcon
-					strokeWidth={2}
-					className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-				/>
-				<input
-					type="text"
+			<InputGroup className="max-w-sm">
+				<InputGroupAddon>
+					<MagnifierIcon />
+				</InputGroupAddon>
+				<InputGroupInput
 					value={value}
 					onChange={(e) => handleChange(e.target.value)}
 					placeholder="Search by URL…"
-					className="h-9 w-full rounded-lg border border-input bg-background pl-8 pr-8 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 				/>
 				{value && (
-					<button
-						type="button"
-						onClick={() => handleChange("")}
-						aria-label="Clear search"
-						className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
-					>
-						<XmarkIcon strokeWidth={2} className="size-3.5" />
-					</button>
+					<InputGroupAddon align="inline-end">
+						<InputGroupButton aria-label="Clear search" onClick={() => handleChange("")}>
+							<XmarkIcon />
+						</InputGroupButton>
+					</InputGroupAddon>
 				)}
-			</div>
+			</InputGroup>
 
 			<div
 				className={cn(

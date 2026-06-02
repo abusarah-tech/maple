@@ -281,6 +281,11 @@ const POD_METRIC_NAMES = [
 	"k8s.pod.memory_request_utilization",
 ] as const
 
+// Facets only need distinct resource-attribute values + uniq(pod.uid); every pod
+// emits cpu.usage, so one metric enumerates the same set at ~1/5 the rows scanned.
+// (The *_utilization metrics require requests/limits to be set; cpu.usage does not.)
+const POD_FACET_PROBE_METRIC = "k8s.pod.cpu.usage" as const
+
 export interface ListPodsOpts {
 	search?: string
 	podNames?: ReadonlyArray<string>
@@ -334,12 +339,13 @@ const workloadAttrKey = (kind: "deployment" | "statefulset" | "daemonset") =>
 
 const podBaseConditions = (
 	$: ColumnAccessor<typeof MetricsGauge.columns>,
+	metricNames: ReadonlyArray<string> = POD_METRIC_NAMES,
 ): Array<CH.Condition | undefined> => [
 	$.OrgId.eq(param.string("orgId")),
 	$.TimeUnix.gte(param.dateTime("startTime")),
 	$.TimeUnix.lte(param.dateTime("endTime")),
 	$.ResourceAttributes.get("k8s.pod.name").neq(""),
-	$.MetricName.in_(...POD_METRIC_NAMES),
+	$.MetricName.in_(...metricNames),
 ]
 
 const podFilterConditions = (
@@ -510,6 +516,9 @@ export function podGaugeTimeseriesQuery(opts: PodGaugeTimeseriesOpts) {
 
 const NODE_METRIC_NAMES = ["k8s.node.cpu.usage", "k8s.node.uptime"] as const
 
+// Single representative metric for node facets — see POD_FACET_PROBE_METRIC.
+const NODE_FACET_PROBE_METRIC = "k8s.node.cpu.usage" as const
+
 export interface ListNodesOpts {
 	search?: string
 	nodeNames?: ReadonlyArray<string>
@@ -532,13 +541,14 @@ export interface ListNodesOutput {
 
 const nodeBaseConditions = (
 	$: ColumnAccessor<typeof MetricsGauge.columns>,
+	metricNames: ReadonlyArray<string> = NODE_METRIC_NAMES,
 ): Array<CH.Condition | undefined> => [
 	$.OrgId.eq(param.string("orgId")),
 	$.TimeUnix.gte(param.dateTime("startTime")),
 	$.TimeUnix.lte(param.dateTime("endTime")),
 	$.ResourceAttributes.get("k8s.node.name").neq(""),
 	$.ResourceAttributes.get("k8s.pod.name").eq(""),
-	$.MetricName.in_(...NODE_METRIC_NAMES),
+	$.MetricName.in_(...metricNames),
 ]
 
 const nodeFilterConditions = (
@@ -819,7 +829,7 @@ const makePodFacet = (opts: ListPodsOpts, attrKey: string, facetType: string, pe
 			facetType: CH.lit(facetType),
 		}))
 		.where(($) => [
-			...podBaseConditions($),
+			...podBaseConditions($, [POD_FACET_PROBE_METRIC]),
 			...podFilterConditions($, opts),
 			$.ResourceAttributes.get(attrKey).neq(""),
 		])
@@ -856,7 +866,7 @@ const makeNodeFacet = (opts: ListNodesOpts, attrKey: string, facetType: string, 
 			facetType: CH.lit(facetType),
 		}))
 		.where(($) => [
-			...nodeBaseConditions($),
+			...nodeBaseConditions($, [NODE_FACET_PROBE_METRIC]),
 			...nodeFilterConditions($, opts),
 			$.ResourceAttributes.get(attrKey).neq(""),
 		])
@@ -896,7 +906,7 @@ const makeWorkloadFacet = (
 			$.TimeUnix.gte(param.dateTime("startTime")),
 			$.TimeUnix.lte(param.dateTime("endTime")),
 			$.ResourceAttributes.get(ownerKey).neq(""),
-			$.MetricName.in_(...POD_METRIC_NAMES),
+			$.MetricName.in_(POD_FACET_PROBE_METRIC),
 			...workloadFilterConditions($, opts, ownerKey),
 			$.ResourceAttributes.get(attrKey).neq(""),
 		])

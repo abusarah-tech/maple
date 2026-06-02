@@ -1481,6 +1481,10 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 					const rows = yield* mapExecError(
 						warehouse.sqlQuery(tenant, compiled.sql, {
 							profile: "discovery",
+							// 10 UNION branches each re-read the wide ResourceAttributes Map column;
+							// cap read-thread concurrency so the per-thread decompression buffers stay
+							// inside the discovery memory budget (bound is ~independent of time range).
+							settings: { maxThreads: 4 },
 							context: "podFacets",
 						}),
 						"podFacets query failed",
@@ -1551,6 +1555,9 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 					const rows = yield* mapExecError(
 						warehouse.sqlQuery(tenant, compiled.sql, {
 							profile: "discovery",
+							// See podFacets: cap read-thread concurrency to bound Map-column
+							// decompression memory across the fan-out of UNION branches.
+							settings: { maxThreads: 4 },
 							context: "nodeFacets",
 						}),
 						"nodeFacets query failed",
@@ -1596,6 +1603,9 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 					const rows = yield* mapExecError(
 						warehouse.sqlQuery(tenant, compiled.sql, {
 							profile: "discovery",
+							// See podFacets: cap read-thread concurrency to bound Map-column
+							// decompression memory across the fan-out of UNION branches.
+							settings: { maxThreads: 4 },
 							context: "workloadFacets",
 						}),
 						"workloadFacets query failed",

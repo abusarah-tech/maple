@@ -154,6 +154,15 @@ describe("podFacetsQuery", () => {
 		const { sql } = compileUnion(podFacetsQuery({ namespaces: ["prod"] }), baseParams)
 		expect(sql).toContain("'prod'")
 	})
+
+	it("scans only the single probe metric, not the full pod metric set", () => {
+		const { sql } = compileUnion(podFacetsQuery({}), baseParams)
+		expect(sql).toContain("MetricName IN ('k8s.pod.cpu.usage')")
+		expect(sql).not.toContain("k8s.pod.cpu_limit_utilization")
+		expect(sql).not.toContain("k8s.pod.cpu_request_utilization")
+		expect(sql).not.toContain("k8s.pod.memory_limit_utilization")
+		expect(sql).not.toContain("k8s.pod.memory_request_utilization")
+	})
 })
 
 describe("podDetailSummaryQuery", () => {
@@ -218,6 +227,12 @@ describe("nodeFacetsQuery", () => {
 		expect(sql).toContain("ResourceAttributes['k8s.node.name']")
 		expect(sql).toContain("ResourceAttributes['k8s.cluster.name']")
 		expect(sql).toContain("ResourceAttributes['deployment.environment.name']")
+	})
+
+	it("scans only k8s.node.cpu.usage, not k8s.node.uptime", () => {
+		const { sql } = compileUnion(nodeFacetsQuery({}), baseParams)
+		expect(sql).toContain("MetricName IN ('k8s.node.cpu.usage')")
+		expect(sql).not.toContain("k8s.node.uptime")
 	})
 })
 
@@ -287,6 +302,13 @@ describe("workloadFacetsQuery", () => {
 		expect(sql).toContain("ResourceAttributes['k8s.namespace.name']")
 		expect(sql).toContain("ResourceAttributes['k8s.cluster.name']")
 		expect(sql).toContain("ResourceAttributes['deployment.environment.name']")
+	})
+
+	it("scans only the single probe metric, not the full pod metric set", () => {
+		const { sql } = compileUnion(workloadFacetsQuery({ kind: "deployment" }), baseParams)
+		expect(sql).toContain("MetricName IN ('k8s.pod.cpu.usage')")
+		expect(sql).not.toContain("k8s.pod.memory_limit_utilization")
+		expect(sql).not.toContain("k8s.pod.cpu_request_utilization")
 	})
 })
 

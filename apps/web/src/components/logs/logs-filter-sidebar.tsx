@@ -7,6 +7,12 @@ import { useEffectiveTimeRange } from "@/hooks/use-effective-time-range"
 import { FilterSection, SearchableFilterSection } from "@/components/filters/filter-section"
 import { Route } from "@/routes/logs"
 import { Separator } from "@maple/ui/components/ui/separator"
+import {
+	InputGroup,
+	InputGroupAddon,
+	InputGroupButton,
+	InputGroupInput,
+} from "@maple/ui/components/ui/input-group"
 import { getLogsFacetsResultAtom } from "@/lib/services/atoms/warehouse-query-atoms"
 import {
 	FilterSidebarBody,
@@ -104,28 +110,27 @@ export function LogsFilterSidebar() {
 							<span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
 								Search
 							</span>
-							<div className="relative mt-2 px-px">
-								<MagnifierIcon
-									strokeWidth={2}
-									className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none"
-								/>
-								<input
-									type="text"
+							<InputGroup className="mt-2">
+								<InputGroupAddon>
+									<MagnifierIcon />
+								</InputGroupAddon>
+								<InputGroupInput
+									size="sm"
 									value={searchText}
 									onChange={(e) => handleSearchChange(e.target.value)}
 									placeholder="Search log messages..."
-									className="h-7 w-full rounded-md border border-input bg-background pl-7 pr-7 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 								/>
 								{searchText && (
-									<button
-										type="button"
-										onClick={() => handleSearchChange("")}
-										className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
-									>
-										<XmarkIcon strokeWidth={2} className="size-3" />
-									</button>
+									<InputGroupAddon align="inline-end">
+										<InputGroupButton
+											aria-label="Clear search"
+											onClick={() => handleSearchChange("")}
+										>
+											<XmarkIcon />
+										</InputGroupButton>
+									</InputGroupAddon>
 								)}
-							</div>
+							</InputGroup>
 						</div>
 						<Separator className="my-2" />
 
