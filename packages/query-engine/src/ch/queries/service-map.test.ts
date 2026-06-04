@@ -492,6 +492,18 @@ describe("service-map database query summaries", () => {
 		expect(sql.indexOf("db.query.summary")).toBeLessThan(sql.indexOf("SpanName"))
 	})
 
+	it("labels top queries from the literal-stripped sample statement, falling back to the derived label", () => {
+		const { sql } = serviceDbTopQueriesSQL(params)
+		// distinct co-located shapes (same op/collection, different SQL) get their
+		// own statement-based label instead of one indistinct summary row…
+		expect(sql).toContain("if(sampleStatement != ''")
+		expect(sql).toContain("AS queryLabel")
+		// …derived by stripping literals from the sample statement (preserving case)
+		expect(sql).toContain("replaceRegexpAll")
+		// …and falls back to the rollup's derived label when there's no statement
+		expect(sql).toContain("fallbackLabel")
+	})
+
 	it("clamps untrusted bucket and limit values", () => {
 		const timeseries = serviceDbQueryTimeseriesSQL({ ...params, bucketSeconds: 1 }).sql
 		const topQueries = serviceDbTopQueriesSQL({ ...params, topN: 500 }).sql

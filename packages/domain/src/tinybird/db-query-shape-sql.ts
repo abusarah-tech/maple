@@ -45,6 +45,19 @@ const normalizeStatementSql = (stmt: string): string =>
 	String.raw`replaceRegexpAll(replaceRegexpAll(replaceRegexpAll(replaceRegexpAll(replaceRegexpAll(lower(${stmt}), '\'[^\']*\'', '?'), '\\bin\\s*\\([^)]*\\)', 'in (?)'), '[0-9]+(\\.[0-9]+)?', '?'), '\\s+', ' '), '^\\s+|\\s+$', '')`
 
 /**
+ * A human-presentable form of a statement for use as the query-shape LABEL:
+ * strip string + numeric literals to `?`, collapse `IN (...)` lists and
+ * whitespace, but PRESERVE case (unlike `normalizeStatementSql`, which
+ * lowercases for the grouping key). This is the shape made visible — it
+ * distinguishes co-located shapes (e.g. several different SELECTs on the same
+ * table) that a terse `{op} {table}` summary flattens into one indistinct row.
+ * Driver-generic op names (e.g. db.operation.name="execute") make that summary
+ * useless, so the read path prefers this whenever statement text exists.
+ */
+export const presentableStatementSql = (stmt: string): string =>
+	String.raw`trimBoth(replaceRegexpAll(replaceRegexpAll(replaceRegexpAll(replaceRegexpAll(${stmt}, '\'[^\']*\'', '?'), '(?i)\\bin\\s*\\([^)]*\\)', 'IN (?)'), '[0-9]+(\\.[0-9]+)?', '?'), '\\s+', ' '))`
+
+/**
  * Best-effort low-cardinality summary derived from raw statement text when the
  * instrumentation didn't emit `db.query.summary`: `{VERB} {first table}`
  * (e.g. "SELECT users", "UPDATE public.accounts"). Empty when no statement.

@@ -14,6 +14,7 @@ import {
 	DB_QUERY_LABEL_SQL,
 	DB_STATEMENT_SQL,
 	DB_SYSTEM_ATTR_SQL,
+	presentableStatementSql,
 } from "@maple/domain/tinybird/db-query-shape-sql"
 import { Schema } from "effect"
 import { escapeClickHouseString } from "../../sql/sql-fragment"
@@ -942,26 +943,49 @@ export function serviceDbTopQueriesSQL(
     FROM traces
     WHERE ${serviceDbRawWhere(params, "currentHour")}
     GROUP BY queryKey`
+	// Outer wrapper derives the display label from the (literal-stripped) sample
+	// statement when present, so co-located shapes — e.g. several different
+	// queries that all carry the generic db.operation.name="execute" +
+	// db.collection.name="subscriptions" — show their distinct SQL instead of one
+	// indistinct "execute subscriptions" row. Falls back to the derived label for
+	// shapes that carry no statement text (Redis ops, connection spans). Done at
+	// read time off the rollup's stored SampleStatement, so this needs no MV change.
 	const sql = `SELECT
   queryKey,
-  any(bLabel) AS queryLabel,
-  anyIf(bStatement, bStatement != '') AS sampleStatement,
-  any(bSampleService) AS sampleService,
-  uniqMerge(bServices) AS serviceCount,
-  sum(bCount) AS queryCount,
-  sum(bEst) AS estimatedQueryCount,
-  sum(bErr) AS errorCount,
-  if(sum(bEst) > 0, sum(bEstErr) / sum(bEst), 0) AS errorRate,
-  if(sum(bEst) > 0, sum(bWDur) / sum(bEst), 0) AS avgDurationMs,
-  if(sum(bCount) > 0, arrayElement(quantilesTDigestWeightedMerge(0.5, 0.95)(bQ), 1) / 1000000, 0) AS p50DurationMs,
-  if(sum(bCount) > 0, arrayElement(quantilesTDigestWeightedMerge(0.5, 0.95)(bQ), 2) / 1000000, 0) AS p95DurationMs,
-  max(bLastSeen) AS lastSeen
+  if(sampleStatement != '', substring(${presentableStatementSql("sampleStatement")}, 1, 220), fallbackLabel) AS queryLabel,
+  sampleStatement,
+  sampleService,
+  serviceCount,
+  queryCount,
+  estimatedQueryCount,
+  errorCount,
+  errorRate,
+  avgDurationMs,
+  p50DurationMs,
+  p95DurationMs,
+  lastSeen
 FROM (
-  ${sealed}
-  UNION ALL
-  ${recent}
+  SELECT
+    queryKey,
+    any(bLabel) AS fallbackLabel,
+    anyIf(bStatement, bStatement != '') AS sampleStatement,
+    any(bSampleService) AS sampleService,
+    uniqMerge(bServices) AS serviceCount,
+    sum(bCount) AS queryCount,
+    sum(bEst) AS estimatedQueryCount,
+    sum(bErr) AS errorCount,
+    if(sum(bEst) > 0, sum(bEstErr) / sum(bEst), 0) AS errorRate,
+    if(sum(bEst) > 0, sum(bWDur) / sum(bEst), 0) AS avgDurationMs,
+    if(sum(bCount) > 0, arrayElement(quantilesTDigestWeightedMerge(0.5, 0.95)(bQ), 1) / 1000000, 0) AS p50DurationMs,
+    if(sum(bCount) > 0, arrayElement(quantilesTDigestWeightedMerge(0.5, 0.95)(bQ), 2) / 1000000, 0) AS p95DurationMs,
+    max(bLastSeen) AS lastSeen
+  FROM (
+    ${sealed}
+    UNION ALL
+    ${recent}
+  )
+  GROUP BY queryKey
 )
-GROUP BY queryKey
 ORDER BY estimatedQueryCount DESC
 LIMIT ${topN}
 FORMAT JSON`
