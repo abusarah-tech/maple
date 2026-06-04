@@ -66,7 +66,7 @@ export function SessionEventsPanel({
 		const rows = events.filter((e) => e.type === tab)
 		return (
 			<>
-				<div className="flex border-b border-border">
+				<div className="flex shrink-0 border-b border-border bg-muted/30">
 					{TABS.map((t) => (
 						<button
 							key={t.id}
@@ -86,11 +86,11 @@ export function SessionEventsPanel({
 					))}
 				</div>
 				{rows.length === 0 ? (
-					<div className="p-6 text-center text-sm text-muted-foreground">
+					<div className="grid flex-1 place-items-center p-6 text-center text-sm text-muted-foreground">
 						No {tab} events in this session.
 					</div>
 				) : (
-					<ul className="max-h-80 divide-y divide-border overflow-y-auto font-mono text-xs">
+					<ul className="min-h-0 flex-1 divide-y divide-border overflow-y-auto font-mono text-xs">
 						{rows.map((ev, i) => (
 							<EventLine key={i} ev={ev} onSeek={() => seekTo(ev.timestamp)} />
 						))}
@@ -101,18 +101,18 @@ export function SessionEventsPanel({
 	}
 
 	return (
-		<section className="rounded-xl border border-border">
+		<section className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
 			{previewEvents
 				? renderBody(previewEvents)
 				: Result.builder(result)
-						.onInitial(() => <Skeleton className="m-3 h-40 rounded-lg" />)
+						.onInitial(() => <Skeleton className="m-3 min-h-0 flex-1 rounded-lg" />)
 						.onError(() => (
-							<div className="p-6 text-center text-sm text-muted-foreground">
+							<div className="grid flex-1 place-items-center p-6 text-center text-sm text-muted-foreground">
 								Couldn't load session events.
 							</div>
 						))
 						.onSuccess((data) => renderBody(data.data as ReadonlyArray<EventRow>))
-						.orElse(() => <Skeleton className="m-3 h-40 rounded-lg" />)}
+						.orElse(() => <Skeleton className="m-3 min-h-0 flex-1 rounded-lg" />)}
 		</section>
 	)
 }
@@ -141,7 +141,11 @@ function EventLine({ ev, onSeek }: { ev: EventRow; onSeek: () => void }) {
 			</button>
 			<div className="min-w-0 flex-1">
 				{ev.type === "console" && (
-					<span className={ev.level === "error" || ev.level === "warn" ? "text-warning-foreground" : ""}>
+					<span
+						className={
+							ev.level === "error" || ev.level === "warn" ? "text-warning-foreground" : ""
+						}
+					>
 						<span className="mr-1.5 uppercase opacity-60">{ev.level || "log"}</span>
 						{ev.message}
 					</span>
@@ -149,7 +153,9 @@ function EventLine({ ev, onSeek }: { ev: EventRow; onSeek: () => void }) {
 				{ev.type === "network" && (
 					<span className="flex items-center gap-2">
 						<span className="opacity-70">{ev.netMethod}</span>
-						<span className={`font-semibold ${statusTone(ev.netStatus)}`}>{ev.netStatus || "ERR"}</span>
+						<span className={`font-semibold ${statusTone(ev.netStatus)}`}>
+							{ev.netStatus || "ERR"}
+						</span>
 						<span className="truncate">{ev.netUrl}</span>
 						<span className="ml-auto shrink-0 opacity-60">{ev.netDurationMs}ms</span>
 					</span>
