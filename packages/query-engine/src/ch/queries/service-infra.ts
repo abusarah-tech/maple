@@ -2,9 +2,9 @@
 // Service ↔ Infrastructure join
 //
 // Joins OTel `ServiceName` to k8s workload identity (`k8s.deployment.name` /
-// `k8s.statefulset.name` / `k8s.daemonset.name` + `k8s.namespace.name` +
-// `k8s.cluster.name`), then enriches with pod count and CPU/memory limit
-// utilization aggregated from the matching k8s.pod.* gauges in metrics_gauge.
+// `k8s.statefulset.name` / `k8s.daemonset.name` + `k8s.namespace.name`), then
+// enriches with pod count and CPU/memory limit utilization aggregated from the
+// matching k8s.pod.* gauges in metrics_gauge.
 //
 // Workload identity is read from the pre-aggregated `service_platforms_hourly`
 // MV (one row per service/env/hour) rather than scanning raw `traces` — the MV
@@ -13,7 +13,13 @@
 // one. Services with no k8s context produce no rows, which the UI renders as
 // an empty Infrastructure tab.
 //
-// The k8s attributes are only present when the agent's `k8sattributes`
+// The JOIN keys on kind/name/namespace only. `k8s.cluster.name` is deliberately
+// NOT a key: it's tagged on the kubeletstats pod gauges but never on spans (the
+// `k8sattributes` processor doesn't set it), so joining on it dropped every row
+// and pod counts always read 0. Cluster is sourced from the metrics side for
+// display only.
+//
+// The span-side k8s attributes are only present when the agent's `k8sattributes`
 // processor has tagged the spans — see deploy/k8s-infra/values.yaml.
 //
 // Built with the ClickHouse query-builder DSL (a `fromQuery(...).leftJoinQuery`
@@ -77,6 +83,11 @@ export function serviceWorkloadsSQL(
 	// per-(service, env, hour) winners collapses to the dominant workload, and
 	// the multiIf precedence (deployment > statefulset > daemonset) mirrors the
 	// classifier used on the metrics side so the JOIN keys line up.
+	//
+	// Cluster is deliberately NOT projected here: it is sourced from spans, where
+	// `k8s.cluster.name` is never tagged (the `k8sattributes` processor doesn't
+	// set it), so `K8sCluster` is always ''. The kubeletstats pod gauges DO carry
+	// it, so the metrics side below owns clusterName for both the JOIN and display.
 	const workloadIdentity = from(ServicePlatformsHourly)
 		.select(($) => {
 			const deployment = CH.max_($.K8sDeploymentName)
@@ -101,7 +112,6 @@ export function serviceWorkloadsSQL(
 					CH.lit(""),
 				),
 				namespace: CH.max_($.K8sNamespaceName),
-				clusterName: CH.max_($.K8sCluster),
 			}
 		})
 		.where(($) => [
@@ -113,8 +123,15 @@ export function serviceWorkloadsSQL(
 		.groupBy("serviceName")
 
 	// Pod count + CPU/memory limit utilization per workload, from the k8s.pod.*
-	// gauges. Keyed by the same workload identity so it LEFT JOINs onto the
-	// identity rows above.
+	// gauges. Keyed by workload identity (kind/name/namespace) so it LEFT JOINs
+	// onto the identity rows above. clusterName is NOT a join key — spans never
+	// carry it (see workloadIdentity) — so it's aggregated here purely for
+	// display and survives the JOIN as the metrics-side value.
+	//
+	// `k8s.pod.cpu.usage` is emitted by every pod, so it (not the *_utilization
+	// gauges, which require CPU/memory limits to be set) drives uniq(pod.uid).
+	// The avgIf aggregates still read their own *_utilization rows from the same
+	// scan, returning 0/null when a cluster doesn't set the matching limit.
 	const workloadMetrics = from(MetricsGauge)
 		.select(($) => {
 			const deployment = $.ResourceAttributes.get("k8s.deployment.name")
@@ -138,7 +155,7 @@ export function serviceWorkloadsSQL(
 					CH.lit(""),
 				),
 				namespace: $.ResourceAttributes.get("k8s.namespace.name"),
-				clusterName: $.ResourceAttributes.get("k8s.cluster.name"),
+				clusterName: CH.max_($.ResourceAttributes.get("k8s.cluster.name")),
 				podCount: CH.uniq($.ResourceAttributes.get("k8s.pod.uid")),
 				avgCpuLimitPct: CH.avgIf($.Value, $.MetricName.eq("k8s.pod.cpu_limit_utilization")),
 				avgMemoryLimitPct: CH.avgIf($.Value, $.MetricName.eq("k8s.pod.memory_limit_utilization")),
@@ -149,27 +166,30 @@ export function serviceWorkloadsSQL(
 			$.TimeUnix.gte(param.dateTime("startTime")),
 			$.TimeUnix.lte(param.dateTime("endTime")),
 			CH.inList($.MetricName, [
+				"k8s.pod.cpu.usage",
 				"k8s.pod.cpu_limit_utilization",
 				"k8s.pod.memory_limit_utilization",
 			]),
 			$.ResourceAttributes.get("k8s.pod.uid").neq(""),
 		])
-		.groupBy("workloadKind", "workloadName", "namespace", "clusterName")
+		.groupBy("workloadKind", "workloadName", "namespace")
 
 	const query = fromQuery(workloadIdentity, "swm")
 		.leftJoinQuery(workloadMetrics, "wm", (swm, wm) =>
 			swm.workloadKind
 				.eq(wm.workloadKind)
 				.and(swm.workloadName.eq(wm.workloadName))
-				.and(swm.namespace.eq(wm.namespace))
-				.and(swm.clusterName.eq(wm.clusterName)),
+				.and(swm.namespace.eq(wm.namespace)),
 		)
 		.select(($) => ({
 			serviceName: $.serviceName,
 			workloadKind: $.workloadKind,
 			workloadName: $.workloadName,
 			namespace: $.namespace,
-			clusterName: $.clusterName,
+			// Cluster comes from the metrics side (spans don't carry it). With
+			// ClickHouse's default join_use_nulls=0, an unmatched LEFT JOIN row
+			// yields '' here, which the non-nullable string schema decodes fine.
+			clusterName: $.wm.clusterName,
 			// LEFT JOIN ⇒ these are null for services with no pod gauges; the
 			// route coerces (`Number(podCount) || 0`, null-checks the averages).
 			podCount: $.wm.podCount,

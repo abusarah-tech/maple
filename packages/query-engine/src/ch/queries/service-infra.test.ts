@@ -64,6 +64,23 @@ describe("serviceWorkloadsSQL", () => {
 		}),
 	)
 
+	it("does not join workloads on clusterName and probes pods via cpu.usage", () => {
+		const { sql } = serviceWorkloadsSQL({ services: ["checkout-api"] }, baseParams)
+
+		// Regression: spans never carry k8s.cluster.name, so joining on it dropped
+		// every row and pod counts always read 0. The identity side must not
+		// project a cluster column and the JOIN must not key on it.
+		expect(sql).not.toContain("swm.clusterName")
+		expect(sql).not.toContain("K8sCluster")
+
+		// cluster is sourced from the metrics side for display only.
+		expect(sql).toContain("wm.clusterName AS clusterName")
+
+		// pods are counted via the always-emitted usage metric, not only the
+		// limit-utilization gauges (which require limits to be set).
+		expect(sql).toContain("'k8s.pod.cpu.usage'")
+	})
+
 	it.effect("empty-service short circuit still carries the workload row schema", () =>
 		Effect.gen(function* () {
 			const compiled = serviceWorkloadsSQL({ services: [] }, baseParams)
