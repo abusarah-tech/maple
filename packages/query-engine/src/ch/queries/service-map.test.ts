@@ -418,44 +418,78 @@ describe("service-map database query summaries", () => {
 		topN: 5,
 	}
 
-	it("scopes summary by org, db system, service, deployment env, and time window", () => {
+	it("reads the sealed rollup for complete hours and raw traces for the in-progress hour", () => {
 		const { sql } = serviceDbQuerySummarySQL(params)
+		expect(sql).toContain("UNION ALL")
+		// sealed rollup branch — complete hours only
+		expect(sql).toContain("FROM service_map_db_query_shapes_hourly")
+		expect(sql).toContain("DbSystem = 'postgresql'")
+		expect(sql).toContain("DeploymentEnv = 'production'")
+		expect(sql).toContain("Hour >= toStartOfHour(toDateTime('2024-01-01 00:00:00'))")
+		expect(sql).toContain("Hour < toStartOfHour(toDateTime('2024-01-02 00:00:00'))")
+		// raw branch — in-progress (current) hour only
 		expect(sql).toContain("FROM traces")
+		expect(sql).toContain("Timestamp >= toStartOfHour(toDateTime('2024-01-02 00:00:00'))")
+		expect(sql).toContain("Timestamp <= toDateTime('2024-01-02 00:00:00')")
 		expect(sql).toContain("OrgId = 'org_1'")
 		expect(sql).toContain("ServiceName = 'artifacts-api'")
 		expect(sql).toContain("ResourceAttributes['deployment.environment'] = 'production'")
-		expect(sql).toContain("Timestamp >= toDateTime('2024-01-01 00:00:00')")
-		expect(sql).toContain("Timestamp <= toDateTime('2024-01-02 00:00:00')")
 		expect(sql).toContain(
 			"coalesce(nullIf(SpanAttributes['db.system.name'], ''), SpanAttributes['db.system']) = 'postgresql'",
 		)
 	})
 
-	it("uses weighted TDigest quantiles for P50/P95 latency", () => {
+	it("merges sample-weighted TDigest states across the rollup + raw branches for P50/P95", () => {
 		const { sql } = serviceDbQuerySummarySQL(params)
+		// rollup stores a t-digest state; raw branch builds the matching state…
+		expect(sql).toContain("quantilesTDigestWeightedMergeState(0.5, 0.95)(DurationQuantiles)")
 		expect(sql).toContain(
-			"quantilesTDigestWeighted(0.5, 0.95)(Duration, toUInt32(greatest(SampleRate, 1.0)))",
+			"quantilesTDigestWeightedState(0.5, 0.95)(Duration, toUInt32(greatest(SampleRate, 1.0)))",
 		)
+		// …and the outer query merges both into final quantiles
+		expect(sql).toContain("quantilesTDigestWeightedMerge(0.5, 0.95)(bQ)")
 		expect(sql).toContain("AS p50DurationMs")
 		expect(sql).toContain("AS p95DurationMs")
 	})
 
-	it("buckets query activity by the requested interval", () => {
-		const { sql } = serviceDbQueryTimeseriesSQL(params)
-		expect(sql).toContain("toStartOfInterval(Timestamp, INTERVAL 300 SECOND) AS bucket")
+	it("buckets sub-hour query activity from raw traces (rollup can't serve <1h buckets)", () => {
+		const { sql } = serviceDbQueryTimeseriesSQL(params) // bucketSeconds: 300
+		expect(sql).toContain("toStartOfInterval(toDateTime(Timestamp), INTERVAL 300 SECOND) AS bucket")
+		expect(sql).toContain("FROM traces")
+		expect(sql).not.toContain("service_map_db_query_shapes_hourly")
 		expect(sql).toContain("GROUP BY bucket")
 		expect(sql).toContain("ORDER BY bucket ASC")
 		expect(sql).toContain("LIMIT 2000")
 	})
 
-	it("groups top queries by statement fingerprint or a hashed query label fallback", () => {
+	it("serves hour-aligned query activity from the rollup + raw union", () => {
+		const { sql } = serviceDbQueryTimeseriesSQL({ ...params, bucketSeconds: 3600 })
+		expect(sql).toContain("FROM service_map_db_query_shapes_hourly")
+		expect(sql).toContain("toStartOfInterval(Hour, INTERVAL 3600 SECOND) AS bucket")
+		expect(sql).toContain("UNION ALL")
+		expect(sql).toContain("quantilesTDigestWeightedMergeState(0.5, 0.95)(DurationQuantiles)")
+	})
+
+	it("groups top queries by the rollup key and the shared fingerprint fallback", () => {
 		const { sql } = serviceDbTopQueriesSQL(params)
+		// sealed branch reads the rollup's pre-computed key…
+		expect(sql).toContain("FROM service_map_db_query_shapes_hourly")
+		// …the raw branch derives the SAME key via the shared SQL fragments
 		expect(sql).toContain("SpanAttributes['db.statement.fingerprint']")
 		expect(sql).toContain("SpanAttributes['db.query.summary']")
 		expect(sql).toContain("cityHash64")
 		expect(sql).toContain("GROUP BY queryKey")
 		expect(sql).toContain("ORDER BY estimatedQueryCount DESC")
 		expect(sql).toContain("LIMIT 5")
+	})
+
+	it("normalizes literals into the shape key and prefers db.query.summary over the span name", () => {
+		const { sql } = serviceDbTopQueriesSQL(params)
+		// literal-normalized fingerprint fallback collapses per-literal variants
+		expect(sql).toContain("replaceRegexpAll")
+		expect(sql).toContain("in (?)")
+		// OTEL label precedence: db.query.summary is consulted before SpanName
+		expect(sql.indexOf("db.query.summary")).toBeLessThan(sql.indexOf("SpanName"))
 	})
 
 	it("clamps untrusted bucket and limit values", () => {

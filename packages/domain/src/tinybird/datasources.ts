@@ -369,6 +369,61 @@ export const serviceMapDbEdgesHourly = defineDatasource("service_map_db_edges_ho
 export type ServiceMapDbEdgesHourlyRow = InferRow<typeof serviceMapDbEdgesHourly>
 
 /**
+ * Pre-aggregated hourly database *query shapes* for the service map's database
+ * detail panel ("Query Activity" + "Top Query Shapes"). One row per
+ * (OrgId, Hour, ServiceName, DbSystem, DeploymentEnv, QueryKey) where `QueryKey`
+ * is the normalized query-shape signature (see `db-query-shape-sql.ts`). Lets the
+ * panel read pre-aggregated rows instead of scanning raw span attributes +
+ * computing per-row fingerprints over the whole window.
+ *
+ * `DurationQuantiles` stores a sample-weighted t-digest state so the panel keeps
+ * true p50/p95 (finalize with
+ * `quantilesTDigestWeightedMerge(0.5, 0.95)(DurationQuantiles)` → Array(Float64)
+ * of [p50, p95] in nanoseconds). All `Estimated*`/`Weighted*` columns are
+ * sample-rate corrected; raw `CallCount`/`ErrorCount` stay unweighted.
+ * Populated by `service_map_db_query_shapes_hourly_mv`.
+ */
+export const serviceMapDbQueryShapesHourly = defineDatasource("service_map_db_query_shapes_hourly", {
+	description:
+		"Pre-aggregated hourly database query shapes (one row per service/db.system/query-shape) for the service map's database detail panel. Uses AggregatingMergeTree with a sample-weighted t-digest state for true p50/p95. Populated by materialized view.",
+	jsonPaths: false,
+	schema: {
+		OrgId: t.string().lowCardinality(),
+		Hour: t.dateTime(),
+		ServiceName: t.string().lowCardinality(),
+		DbSystem: t.string().lowCardinality(),
+		DeploymentEnv: t.string().lowCardinality(),
+		// Normalized query-shape signature — NOT LowCardinality: bounded by the
+		// number of distinct shapes per org (hundreds–low thousands), which is
+		// above the LowCardinality sweet spot.
+		QueryKey: t.string(),
+		// Representative shape label / sample statement (SimpleAggregateFunction
+		// `any` — one representative per merged group).
+		QueryLabel: t.simpleAggregateFunction("any", t.string()),
+		SampleStatement: t.simpleAggregateFunction("any", t.string()),
+		CallCount: t.simpleAggregateFunction("sum", t.uint64()),
+		ErrorCount: t.simpleAggregateFunction("sum", t.uint64()),
+		EstimatedCount: t.simpleAggregateFunction("sum", t.float64()),
+		EstimatedErrorCount: t.simpleAggregateFunction("sum", t.float64()),
+		// Sample-weighted duration sum in ms: sum(Duration * SampleRate / 1e6).
+		// Pair with EstimatedCount for a weighted average.
+		WeightedDurationSumMs: t.simpleAggregateFunction("sum", t.float64()),
+		// CH type sig: AggregateFunction(quantilesTDigestWeighted(0.5, 0.95), UInt64, UInt32)
+		// (value type UInt64 smuggled into the func name — same trick as
+		// traces_aggregates_hourly.DurationQuantiles — weight type UInt32 passed
+		// explicitly). Quantiles returned in nanoseconds; divide by 1e6 for ms.
+		DurationQuantiles: t.aggregateFunction("quantilesTDigestWeighted(0.5, 0.95), UInt64", t.uint32()),
+	},
+	engine: engine.aggregatingMergeTree({
+		partitionKey: "toDate(Hour)",
+		sortingKey: ["OrgId", "Hour", "DeploymentEnv", "ServiceName", "DbSystem", "QueryKey"],
+		ttl: "toDate(Hour) + INTERVAL 90 DAY",
+	}),
+})
+
+export type ServiceMapDbQueryShapesHourlyRow = InferRow<typeof serviceMapDbQueryShapesHourly>
+
+/**
  * Pre-aggregated hourly service-to-external-target edges for the service detail
  * page's Dependencies tab (and, eventually, external nodes on the service map).
  *
