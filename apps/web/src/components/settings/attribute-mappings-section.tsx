@@ -41,13 +41,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@maple/ui/components/ui/dialog"
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@maple/ui/components/ui/dropdown-menu"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@maple/ui/components/ui/empty"
 import { Input } from "@maple/ui/components/ui/input"
 import { Label } from "@maple/ui/components/ui/label"
@@ -58,16 +51,25 @@ import { cn } from "@maple/ui/lib/utils"
 import {
 	AlertWarningIcon,
 	ArrowPathIcon,
+	ArrowRightFromLineIcon,
 	ArrowRightIcon,
 	ArrowUpDownIcon,
-	DotsVerticalIcon,
+	CopyIcon,
+	type IconComponent,
 	LoaderIcon,
 	PencilIcon,
 	PlusIcon,
 	TrashIcon,
 } from "@/components/icons"
+import { formatRelativeTime } from "@/lib/format"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
+import {
+	ingestAttributeMappingsListAtom,
+	recommendationIssuesListAtom,
+} from "@/lib/services/atoms/ingestion-atoms"
 import { AttributeKeyAutocomplete } from "./attribute-key-autocomplete"
+
+const MONO = "font-mono text-[0.92em] text-muted-foreground"
 
 const SOURCE_CONTEXT_LABELS: Record<IngestMappingSourceContext, string> = {
 	span: "Span attribute",
@@ -77,6 +79,15 @@ const SOURCE_CONTEXT_LABELS: Record<IngestMappingSourceContext, string> = {
 const OPERATION_LABELS: Record<IngestMappingOperation, string> = {
 	move: "Move",
 	copy: "Copy",
+}
+
+// Copy is additive (keeps the source) → calm blue; Move removes the source key → amber caution.
+const OPERATION_BADGE: Record<
+	IngestMappingOperation,
+	{ icon: IconComponent; variant: "info" | "warning" }
+> = {
+	copy: { icon: CopyIcon, variant: "info" },
+	move: { icon: ArrowRightFromLineIcon, variant: "warning" },
 }
 
 export function AttributeMappingsSection() {
@@ -92,9 +103,10 @@ export function AttributeMappingsSection() {
 	const [formTargetKey, setFormTargetKey] = useState("")
 	const [formOperation, setFormOperation] = useState<IngestMappingOperation>("copy")
 
-	const listQueryAtom = MapleApiAtomClient.query("ingestAttributeMappings", "list", {})
-	const listResult = useAtomValue(listQueryAtom)
-	const refreshMappings = useAtomRefresh(listQueryAtom)
+	const listResult = useAtomValue(ingestAttributeMappingsListAtom)
+	const refreshMappings = useAtomRefresh(ingestAttributeMappingsListAtom)
+	// Mappings reconcile the recommendation list server-side, so refresh both after a change.
+	const refreshRecommendations = useAtomRefresh(recommendationIssuesListAtom)
 
 	const createMutation = useAtomSet(MapleApiAtomClient.mutation("ingestAttributeMappings", "create"), {
 		mode: "promiseExit",
@@ -152,6 +164,7 @@ export function AttributeMappingsSection() {
 				toast.success("Attribute mapping updated")
 				setDialogOpen(false)
 				refreshMappings()
+				refreshRecommendations()
 			} else {
 				toast.error("Failed to update attribute mapping")
 			}
@@ -169,6 +182,7 @@ export function AttributeMappingsSection() {
 				toast.success("Attribute mapping created")
 				setDialogOpen(false)
 				refreshMappings()
+				refreshRecommendations()
 			} else {
 				toast.error("Failed to create attribute mapping")
 			}
@@ -182,6 +196,7 @@ export function AttributeMappingsSection() {
 		if (Exit.isSuccess(result)) {
 			toast.success("Attribute mapping deleted")
 			refreshMappings()
+			refreshRecommendations()
 		} else {
 			toast.error("Failed to delete attribute mapping")
 		}
@@ -275,81 +290,88 @@ export function AttributeMappingsSection() {
 							</Button>
 						</Empty>
 					) : (
-						<div className="divide-border/60 divide-y">
-							{mappings.map((mapping) => (
+						<div>
+							{/* column header */}
+							<div className="text-muted-foreground border-border/60 -mx-6 flex items-center gap-4 border-b px-6 pt-1 pb-2 text-xs">
+								<div className="w-44 shrink-0">Name</div>
+								<div className="flex-1">Mapping</div>
+								<div className="w-24 shrink-0">Operation</div>
+								<div className="w-40 shrink-0 text-right">Added</div>
+							</div>
+
+							{mappings.map((mapping) => {
+								const operation = OPERATION_BADGE[mapping.operation]
+								const OperationIcon = operation.icon
+								return (
 								<div
 									key={mapping.id}
 									className={cn(
-										"flex items-center gap-4 py-3 first:pt-0 last:pb-0",
+										"group border-border/60 hover:bg-muted/40 -mx-6 flex items-center gap-4 border-b px-6 py-2.5 transition-colors last:border-b-0",
 										!mapping.enabled && "opacity-55",
 									)}
 								>
-									<div className="min-w-0 flex-1">
-										<div className="mb-1.5 flex items-center gap-2">
-											<span className="truncate text-sm font-medium">
-												{mapping.name}
+									<span className="w-44 shrink-0 truncate text-sm font-medium" title={mapping.name}>
+										{mapping.name}
+									</span>
+
+									<div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-sm">
+										<code className={MONO}>{mapping.sourceKey}</code>
+										<ArrowRightIcon size={12} className="text-muted-foreground shrink-0" />
+										<code className="font-mono text-[0.92em] text-foreground">
+											{mapping.targetKey}
+										</code>
+										{mapping.sourceContext === "resource" && (
+											<span className="text-muted-foreground text-xs">
+												· from {SOURCE_CONTEXT_LABELS.resource.toLowerCase()}
 											</span>
-											<Badge
-												variant={mapping.operation === "move" ? "default" : "secondary"}
-												className="shrink-0"
-											>
-												{OPERATION_LABELS[mapping.operation]}
-											</Badge>
-										</div>
-										<div className="flex flex-wrap items-center gap-1.5 text-xs">
-											<code className="bg-muted text-foreground rounded-md px-1.5 py-0.5 font-mono">
-												{mapping.sourceKey}
-											</code>
-											<ArrowRightIcon
-												size={12}
-												className="text-muted-foreground shrink-0"
-											/>
-											<code className="bg-muted text-foreground rounded-md px-1.5 py-0.5 font-mono">
-												{mapping.targetKey}
-											</code>
-											{mapping.sourceContext === "resource" && (
-												<span className="text-muted-foreground">
-													· from {SOURCE_CONTEXT_LABELS.resource.toLowerCase()}
-												</span>
-											)}
-										</div>
+										)}
 									</div>
 
-									<Switch
-										checked={mapping.enabled}
-										onCheckedChange={() => handleToggleEnabled(mapping)}
-										disabled={togglingId === mapping.id}
-									/>
+									<div className="w-24 shrink-0">
+										<Badge variant={operation.variant} className="gap-1">
+											<OperationIcon size={11} />
+											{OPERATION_LABELS[mapping.operation]}
+										</Badge>
+									</div>
 
-									<DropdownMenu>
-										<DropdownMenuTrigger
-											render={
-												<Button
-													variant="ghost"
-													size="icon-sm"
-													className="text-muted-foreground hover:text-foreground shrink-0"
-												/>
-											}
+									<div className="relative flex w-40 shrink-0 items-center justify-end gap-3">
+										<Switch
+											checked={mapping.enabled}
+											onCheckedChange={() => handleToggleEnabled(mapping)}
+											disabled={togglingId === mapping.id}
+										/>
+										<span
+											className="text-muted-foreground w-20 text-right text-xs whitespace-nowrap tabular-nums transition-opacity group-hover:opacity-0"
+											title={new Date(mapping.createdAt).toLocaleString()}
 										>
-											<DotsVerticalIcon size={14} />
-										</DropdownMenuTrigger>
-										<DropdownMenuContent align="end">
-											<DropdownMenuItem onClick={() => openEditDialog(mapping)}>
+											{formatRelativeTime(mapping.createdAt)}
+										</span>
+										<div className="absolute right-0 flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+											<Button
+												variant="ghost"
+												size="icon-sm"
+												className="text-muted-foreground hover:text-foreground"
+												onClick={() => openEditDialog(mapping)}
+												aria-label="Edit mapping"
+												title="Edit"
+											>
 												<PencilIcon size={14} />
-												Edit
-											</DropdownMenuItem>
-											<DropdownMenuSeparator />
-											<DropdownMenuItem
-												variant="destructive"
+											</Button>
+											<Button
+												variant="ghost"
+												size="icon-sm"
+												className="text-muted-foreground hover:text-destructive"
 												onClick={() => setDeleteConfirm(mapping)}
+												aria-label="Delete mapping"
+												title="Delete"
 											>
 												<TrashIcon size={14} />
-												Delete
-											</DropdownMenuItem>
-										</DropdownMenuContent>
-									</DropdownMenu>
+											</Button>
+										</div>
+									</div>
 								</div>
-							))}
+								)
+							})}
 						</div>
 					)}
 				</CardContent>

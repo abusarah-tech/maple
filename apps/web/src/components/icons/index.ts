@@ -41,6 +41,7 @@ export {
 
 // App-specific icons (not part of the core library).
 export { ArrowPathIcon } from "./arrow-path"
+export { ArrowRightFromLineIcon } from "./arrow-right-from-line"
 export { ArrowRotateAnticlockwiseIcon } from "./arrow-rotate-anticlockwise"
 export { ArrowUpIcon } from "./arrow-up"
 export { ArrowUpDownIcon } from "./arrow-up-down"

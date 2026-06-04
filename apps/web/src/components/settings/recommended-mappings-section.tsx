@@ -25,6 +25,10 @@ import {
 	XmarkIcon,
 } from "@/components/icons"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
+import {
+	ingestAttributeMappingsListAtom,
+	recommendationIssuesListAtom,
+} from "@/lib/services/atoms/ingestion-atoms"
 import { formatRelativeTime } from "@/lib/format"
 
 type IssueKind = RecommendationIssue["kind"]
@@ -101,9 +105,10 @@ export function RecommendedMappingsSection() {
 	const [applyingId, setApplyingId] = useState<string | null>(null)
 	const [busyId, setBusyId] = useState<string | null>(null)
 
-	const listAtom = MapleApiAtomClient.query("recommendationIssues", "list", {})
-	const listResult = useAtomValue(listAtom)
-	const refreshIssues = useAtomRefresh(listAtom)
+	const listResult = useAtomValue(recommendationIssuesListAtom)
+	const refreshIssues = useAtomRefresh(recommendationIssuesListAtom)
+	// Applying a recommendation creates a mapping, so refresh the mappings list too.
+	const refreshMappings = useAtomRefresh(ingestAttributeMappingsListAtom)
 
 	const createMutation = useAtomSet(
 		MapleApiAtomClient.mutation("ingestAttributeMappings", "create"),
@@ -144,6 +149,7 @@ export function RecommendedMappingsSection() {
 		if (Exit.isSuccess(result)) {
 			toast.success(`Mapping created — ${issue.sourceKey} → ${issue.canonicalKey}`)
 			refreshIssues()
+			refreshMappings()
 		} else {
 			toast.error("Failed to create mapping")
 		}

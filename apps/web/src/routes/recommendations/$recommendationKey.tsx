@@ -9,6 +9,10 @@ import { CreateIngestAttributeMappingRequest, type RecommendationIssue } from "@
 
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
+import {
+	ingestAttributeMappingsListAtom,
+	recommendationIssuesListAtom,
+} from "@/lib/services/atoms/ingestion-atoms"
 import { formatRelativeTime } from "@/lib/format"
 
 import { Badge } from "@maple/ui/components/ui/badge"
@@ -110,9 +114,10 @@ function recSentence(issue: RecommendationIssue) {
 function RecommendationDetailPage() {
 	const { recommendationKey } = Route.useParams()
 
-	const listAtom = MapleApiAtomClient.query("recommendationIssues", "list", {})
-	const listResult = useAtomValue(listAtom)
-	const refreshIssues = useAtomRefresh(listAtom)
+	const listResult = useAtomValue(recommendationIssuesListAtom)
+	const refreshIssues = useAtomRefresh(recommendationIssuesListAtom)
+	// Applying a recommendation creates a mapping, so refresh the mappings list too.
+	const refreshMappings = useAtomRefresh(ingestAttributeMappingsListAtom)
 
 	const createMutation = useAtomSet(
 		MapleApiAtomClient.mutation("ingestAttributeMappings", "create"),
@@ -150,6 +155,7 @@ function RecommendationDetailPage() {
 		if (Exit.isSuccess(result)) {
 			toast.success(`Mapping created — ${target.sourceKey} → ${target.canonicalKey}`)
 			refreshIssues()
+			refreshMappings()
 		} else {
 			toast.error("Failed to create mapping")
 		}
