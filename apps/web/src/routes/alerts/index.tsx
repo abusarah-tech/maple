@@ -2,11 +2,12 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { Result, useAtomSet, useAtomValue } from "@/lib/effect-atom"
 import { effectRoute } from "@effect-router/core"
 import { Exit, Option, Schema } from "effect"
-import { useState, useMemo } from "react"
+import { Fragment, useState, useMemo } from "react"
 import { toast } from "sonner"
 
 import { DestinationDialog } from "@/components/alerts/destination-dialog"
 import { DestinationCard } from "@/components/alerts/destination-card"
+import { ProviderLogo } from "@/components/alerts/destination-provider"
 import { AlertStatusBadge } from "@/components/alerts/alert-status-badge"
 import { AlertSeverityBadge } from "@/components/alerts/alert-severity-badge"
 import { AlertStatCard, AlertFiringHero } from "@/components/alerts/alert-stat-card"
@@ -26,6 +27,10 @@ import {
 	destinationTypeLabels,
 	formatSignalValue,
 	formatAlertDateTime,
+	formatAlertTime,
+	eventTypeMeta,
+	deliveryStatusMeta,
+	groupDeliveryEventsByDay,
 	getExitErrorMessage,
 	defaultDestinationForm,
 	destinationToFormState,
@@ -287,30 +292,7 @@ function MonitorTab({
 						<TableBody>
 							{deliveryEvents.slice(0, 10).map((event) => {
 								const rule = rulesById.get(event.ruleId)
-								const toneClass =
-									event.eventType === "trigger"
-										? "text-destructive"
-										: event.eventType === "resolve"
-											? "text-emerald-500"
-											: event.eventType === "renotify"
-												? "text-amber-500"
-												: "text-muted-foreground"
-								const dotClass =
-									event.eventType === "trigger"
-										? "bg-destructive"
-										: event.eventType === "resolve"
-											? "bg-emerald-500"
-											: event.eventType === "renotify"
-												? "bg-amber-500"
-												: "bg-muted-foreground"
-								const label =
-									event.eventType === "trigger"
-										? "Triggered"
-										: event.eventType === "resolve"
-											? "Resolved"
-											: event.eventType === "renotify"
-												? "Renotify"
-												: "Test"
+								const ev = eventTypeMeta[event.eventType]
 
 								return (
 									<TableRow key={event.id}>
@@ -318,11 +300,11 @@ function MonitorTab({
 											<span
 												className={cn(
 													"flex items-center gap-1.5 text-xs font-medium",
-													toneClass,
+													ev.text,
 												)}
 											>
-												<span className={cn("size-1.5 rounded-full", dotClass)} />
-												{label}
+												<span className={cn("size-1.5 rounded-full", ev.dot)} />
+												{ev.label}
 											</span>
 										</TableCell>
 										<TableCell className="truncate">
@@ -416,6 +398,7 @@ function AlertsPage() {
 	const deliveryEvents = Result.builder(deliveryEventsResult)
 		.onSuccess((response) => [...response.events] as AlertDeliveryEvent[])
 		.orElse(() => [])
+	const deliveryEventGroups = useMemo(() => groupDeliveryEventsByDay(deliveryEvents), [deliveryEvents])
 
 	const isAdmin = Result.builder(sessionResult)
 		.onSuccess((session) => session.roles.some((role) => role === "root" || role === "org:admin"))
@@ -992,69 +975,108 @@ function AlertsPage() {
 									<Table>
 										<TableHeader>
 											<TableRow>
-												<TableHead>Destination</TableHead>
-												<TableHead>Event</TableHead>
-												<TableHead>Status</TableHead>
-												<TableHead>Attempt</TableHead>
-												<TableHead>Scheduled</TableHead>
-												<TableHead>Result</TableHead>
+												<TableHead className="w-[150px]">Status</TableHead>
+												<TableHead className="w-[128px]">Event</TableHead>
+												<TableHead className="w-[240px]">Destination</TableHead>
+												<TableHead>Detail</TableHead>
+												<TableHead className="w-[88px] text-right">Time</TableHead>
 											</TableRow>
 										</TableHeader>
 										<TableBody>
-											{deliveryEvents.map((event) => (
-												<TableRow key={event.id}>
-													<TableCell>
-														<div className="flex flex-col">
-															<span className="font-medium">
-																{event.destinationName}
-															</span>
-															<span className="text-muted-foreground text-xs">
-																{destinationTypeLabels[event.destinationType]}
-															</span>
-														</div>
-													</TableCell>
-													<TableCell className="capitalize">
-														{event.eventType}
-													</TableCell>
-													<TableCell>
-														<Badge
-															variant={
-																event.status === "success"
-																	? "secondary"
-																	: event.status === "failed"
-																		? "destructive"
-																		: "outline"
-															}
+											{deliveryEventGroups.map((group) => (
+												<Fragment key={group.key}>
+													<TableRow>
+														<TableCell
+															colSpan={5}
+															className="bg-muted/30 py-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
 														>
-															{event.status}
-														</Badge>
-													</TableCell>
-													<TableCell className="tabular-nums">
-														{event.attemptNumber}
-													</TableCell>
-													<TableCell>
-														<div className="flex flex-col">
-															<span>
-																{formatAlertDateTime(event.scheduledAt)}
+															<span className="flex items-center gap-2">
+																{group.label}
+																<span className="tracking-normal normal-case text-muted-foreground/55">
+																	{group.events.length}{" "}
+																	{group.events.length === 1 ? "attempt" : "attempts"}
+																</span>
 															</span>
-															<span className="text-muted-foreground text-xs">
-																{formatRelativeTime(event.scheduledAt)}
-															</span>
-														</div>
-													</TableCell>
-													<TableCell className="max-w-[320px]">
-														<div className="text-sm truncate">
-															{event.providerMessage ??
-																event.errorMessage ??
-																"Queued"}
-														</div>
-														{event.providerReference && (
-															<div className="text-muted-foreground truncate text-xs">
-																Ref: {event.providerReference}
-															</div>
-														)}
-													</TableCell>
-												</TableRow>
+														</TableCell>
+													</TableRow>
+													{group.events.map((event) => {
+														const ev = eventTypeMeta[event.eventType]
+														const status = deliveryStatusMeta[event.status]
+														return (
+															<TableRow key={event.id}>
+																<TableCell>
+																	<span className="flex items-center gap-1.5">
+																		<Badge variant={status.variant} size="sm">
+																			{status.label}
+																		</Badge>
+																		{event.attemptNumber > 1 && (
+																			<span
+																				className="text-warning tabular-nums text-[11px]"
+																				title={`Attempt ${event.attemptNumber}`}
+																			>
+																				↻{event.attemptNumber}
+																			</span>
+																		)}
+																	</span>
+																</TableCell>
+																<TableCell>
+																	<span
+																		className={cn(
+																			"flex items-center gap-1.5 text-xs font-medium",
+																			ev.text,
+																		)}
+																	>
+																		<span className={cn("size-1.5 rounded-full", ev.dot)} />
+																		{ev.label}
+																	</span>
+																</TableCell>
+																<TableCell>
+																	<span className="flex items-center gap-2">
+																		<ProviderLogo
+																			type={event.destinationType}
+																			size={32}
+																			bare
+																			className="flex shrink-0 items-center"
+																		/>
+																		<span className="truncate font-medium">
+																			{event.destinationName}
+																		</span>
+																	</span>
+																</TableCell>
+																<TableCell className="max-w-0">
+																	{event.status === "failed" ? (
+																		<span className="block truncate text-xs text-destructive/90">
+																			{event.errorMessage ?? "Delivery failed"}
+																			{event.responseCode != null && (
+																				<span className="text-muted-foreground">
+																					{" · "}
+																					{event.responseCode}
+																				</span>
+																			)}
+																		</span>
+																	) : event.providerReference ? (
+																		<span className="block truncate text-xs text-muted-foreground">
+																			{event.providerReference}
+																		</span>
+																	) : null}
+																</TableCell>
+																<TableCell className="text-right">
+																	<Tooltip>
+																		<TooltipTrigger
+																			render={<span />}
+																			className="cursor-default text-muted-foreground tabular-nums"
+																		>
+																			{formatAlertTime(event.scheduledAt)}
+																		</TooltipTrigger>
+																		<TooltipContent>
+																			{formatAlertDateTime(event.scheduledAt)}
+																		</TooltipContent>
+																	</Tooltip>
+																</TableCell>
+															</TableRow>
+														)
+													})}
+												</Fragment>
 											))}
 										</TableBody>
 									</Table>
