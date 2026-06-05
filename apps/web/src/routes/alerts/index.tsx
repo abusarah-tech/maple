@@ -42,7 +42,6 @@ import {
 	CircleWarningIcon,
 	FireIcon,
 	MagnifierIcon,
-	PaperPlaneIcon,
 	PlusIcon,
 	TruckIcon,
 	XmarkIcon,
@@ -111,6 +110,48 @@ function SignalBadge({ signalType }: { signalType: string }) {
 		<Badge variant="outline" className={cn("text-xs", signalBadgeClass[signalType])}>
 			{signalLabels[signalType as keyof typeof signalLabels] ?? signalType}
 		</Badge>
+	)
+}
+
+/**
+ * Notify cell. Shows the real provider marks a rule routes to (joined from the
+ * already-loaded destinations) instead of an opaque count. An enabled rule with
+ * no destination is surfaced as a warning — it can page no one.
+ */
+function NotifyChannels({ destinations, enabled }: { destinations: AlertDestination[]; enabled: boolean }) {
+	if (destinations.length === 0) {
+		if (!enabled) return <span className="text-muted-foreground text-xs">No channel</span>
+		return (
+			<Tooltip>
+				<TooltipTrigger
+					render={
+						<span className="inline-flex cursor-default items-center gap-1 text-warning text-xs" />
+					}
+				>
+					<CircleWarningIcon size={12} />
+					No channel
+				</TooltipTrigger>
+				<TooltipContent>Enabled but routed nowhere — this rule can notify no one.</TooltipContent>
+			</Tooltip>
+		)
+	}
+
+	const shown = destinations.slice(0, 3)
+	const extra = destinations.length - shown.length
+	return (
+		<Tooltip>
+			<TooltipTrigger render={<span className="inline-flex cursor-default items-center gap-1.5" />}>
+				<span className="flex items-center gap-1">
+					{shown.map((d) => (
+						<ProviderLogo key={d.id} type={d.type} size={28} bare className="flex items-center" />
+					))}
+				</span>
+				{extra > 0 && (
+					<span className="text-muted-foreground text-xs tabular-nums">+{extra}</span>
+				)}
+			</TooltipTrigger>
+			<TooltipContent>{destinations.map((d) => d.name).join(", ")}</TooltipContent>
+		</Tooltip>
 	)
 }
 
@@ -589,6 +630,13 @@ function AlertsPage() {
 		return result
 	}, [rules, searchQuery, creatorFilter])
 
+	// Resolve each rule's destination IDs against the destinations already loaded
+	// for the page — no extra query — so the Notify column can show real channels.
+	const destinationsById = useMemo(
+		() => new Map(destinations.map((d) => [d.id, d])),
+		[destinations],
+	)
+
 	const tabBar = (
 		<Tabs value={activeTab} onValueChange={(v) => handleTabSelect(v as AlertsTab)}>
 			<TabsList variant="underline">
@@ -770,7 +818,7 @@ function AlertsPage() {
 											<TableHead className="w-[160px]">Scope</TableHead>
 											<TableHead className="w-[180px]">Condition</TableHead>
 											<TableHead className="w-[100px]">Severity</TableHead>
-											<TableHead className="w-[70px]">Notify</TableHead>
+											<TableHead className="w-[110px]">Notify</TableHead>
 											<TableHead className="w-[100px]">Status</TableHead>
 										</TableRow>
 									</TableHeader>
@@ -781,6 +829,11 @@ function AlertsPage() {
 												: firingRuleIds.has(rule.id)
 													? "firing"
 													: "ok"
+											// Dedupe by id: a rule that lists the same destination twice
+											// still notifies it once, so show one mark (and keep React keys unique).
+											const ruleDestinations = [...new Set(rule.destinationIds)]
+												.map((id) => destinationsById.get(id))
+												.filter((d): d is AlertDestination => d != null)
 
 											return (
 												<TableRow
@@ -858,11 +911,11 @@ function AlertsPage() {
 													<TableCell>
 														<AlertSeverityBadge severity={rule.severity} />
 													</TableCell>
-													<TableCell>
-														<span className="flex items-center gap-1 text-xs text-muted-foreground">
-															{rule.destinationIds.length}
-															<PaperPlaneIcon size={12} />
-														</span>
+													<TableCell onClick={(e) => e.stopPropagation()}>
+														<NotifyChannels
+															destinations={ruleDestinations}
+															enabled={rule.enabled}
+														/>
 													</TableCell>
 													<TableCell>
 														<div className="flex items-center gap-1.5">
