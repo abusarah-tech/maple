@@ -27,8 +27,8 @@
 		<link rel="icon" href="/favicon.ico" />
 
 		<!-- Apply the saved theme before first paint to avoid a flash of the wrong theme.
-		     Must stay in sync with the next-themes config in src/main.tsx
-		     (storageKey "maple-theme", class attribute on <html>, default "dark"). -->
+		     Must stay in sync with the theme store in @maple/ui/hooks/use-theme
+		     (storage key "maple-theme", `light`/`dark` class on <html>, default "dark"). -->
 		<script>
 			;(() => {
 				try {

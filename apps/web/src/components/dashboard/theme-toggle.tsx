@@ -1,5 +1,4 @@
-import { useTheme } from "next-themes"
-import { useEffect, useState } from "react"
+import { useTheme } from "@maple/ui/hooks/use-theme"
 import { Switch } from "@maple/ui/components/ui/switch"
 import { MoonIcon, SunIcon } from "@/components/icons"
 
@@ -10,19 +9,10 @@ import { MoonIcon, SunIcon } from "@/components/icons"
  * items close the menu on click, which would dismiss the dropdown every time
  * the switch is flipped. The icon reflects the active theme; the switch is on
  * when dark mode is active.
- *
- * `next-themes` reports `resolvedTheme` as `undefined` until mounted, so we gate
- * the icon/checked state on a mounted flag to avoid a transient wrong state.
  */
 export function ThemeToggle() {
-	const { resolvedTheme, setTheme } = useTheme()
-	const [mounted, setMounted] = useState(false)
-
-	useEffect(() => {
-		setMounted(true)
-	}, [])
-
-	const isDark = !mounted || resolvedTheme === "dark"
+	const { theme, setTheme } = useTheme()
+	const isDark = theme === "dark"
 
 	return (
 		<div className="flex items-center gap-2 rounded-md px-2 py-2 text-xs select-none">
