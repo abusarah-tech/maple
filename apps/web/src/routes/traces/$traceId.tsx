@@ -1,3 +1,4 @@
+import * as React from "react"
 import { useNavigate, useRouterState, createFileRoute } from "@tanstack/react-router"
 import { Result, useAtomValue } from "@/lib/effect-atom"
 import { effectRoute } from "@effect-router/core"
@@ -14,7 +15,7 @@ import { Skeleton } from "@maple/ui/components/ui/skeleton"
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@maple/ui/components/ui/resizable"
 import { formatDuration } from "@/lib/format"
 import { getServiceLegendColor } from "@maple/ui/lib/colors"
-import { type Span, type SpanNode } from "@/api/warehouse/traces"
+import { type Span, type SpanNode, type SpanHierarchyResponse } from "@/api/warehouse/traces"
 import { getSpanHierarchyResultAtom } from "@/lib/services/atoms/warehouse-query-atoms"
 import { findSpanById } from "@maple/ui/components/traces/flow-utils"
 import { HttpSpanLabel } from "@maple/ui/components/traces/http-span-label"
@@ -55,7 +56,6 @@ function TraceDetailPage() {
 	const search = Route.useSearch()
 	const searchStr = useRouterState({ select: (state) => state.location.searchStr })
 	const backToTracesHref = buildBackToTracesHref(searchStr)
-	const navigate = useNavigate({ from: Route.fullPath })
 	const result = useAtomValue(
 		getSpanHierarchyResultAtom({
 			data: { traceId: Schema.decodeSync(TraceId)(traceId), timestamp: search.t },
@@ -100,24 +100,6 @@ function TraceDetailPage() {
 			</DashboardLayout>
 		))
 		.onSuccess((data) => {
-			const selectedSpan = search.spanId ? (findSpanById(data.rootSpans, search.spanId) ?? null) : null
-
-			const handleSelectSpan = (span: SpanNode) => {
-				if (search.spanId === span.spanId) return
-				navigate({
-					search: (prev: Record<string, unknown>) => ({ ...prev, spanId: span.spanId }),
-					replace: true,
-				})
-			}
-
-			const handleCloseSpanDetails = () => {
-				if (!search.spanId) return
-				navigate({
-					search: (prev: Record<string, unknown>) => ({ ...prev, spanId: undefined }),
-					replace: true,
-				})
-			}
-
 			if (data.spans.length === 0) {
 				return (
 					<DashboardLayout
@@ -170,174 +152,226 @@ function TraceDetailPage() {
 				)
 			}
 
-			const services = [...new Set(data.spans.map((s: Span) => s.serviceName))]
-			const rootSpan = data.rootSpans[0]
-			const rootHttpInfo = rootSpan ? getHttpInfo(rootSpan) : null
-			const deploymentEnv = rootSpan?.resourceAttributes?.["deployment.environment"]
-			const commitSha = rootSpan?.resourceAttributes?.["deployment.commit_sha"]
-			const hasError = data.spans.some((s: Span) => {
-				if (s.statusCode === "Error") return true
-				const httpStatus = s.spanAttributes?.["http.status_code"]
-				if (httpStatus) {
-					const code = typeof httpStatus === "string" ? parseInt(httpStatus) : httpStatus
-					if (typeof code === "number" && code >= 500) return true
-				}
-				return false
-			})
-			const traceStartTime =
-				data.spans.length > 0
-					? data.spans.reduce((earliest, span) =>
-							new Date(span.startTime) < new Date(earliest.startTime) ? span : earliest,
-						).startTime
-					: new Date().toISOString()
-
 			return (
-				<DashboardLayout
-					breadcrumbs={[
-						{ label: "Traces", href: backToTracesHref },
-						{ label: traceId.slice(0, 8) },
-					]}
-					title={rootHttpInfo ? undefined : (rootSpan?.spanName ?? "Unknown Trace")}
-					titleContent={
-						rootHttpInfo ? (
-							<h1 className="min-w-0">
-								<HttpSpanLabel
-									spanName={rootSpan.spanName}
-									spanAttributes={rootSpan.spanAttributes}
-									spanKind={rootSpan.spanKind}
-									className="gap-3 text-2xl font-bold tracking-tight"
-									textClassName="text-2xl font-bold tracking-tight"
-								/>
-							</h1>
-						) : undefined
-					}
-					description={`${data.spans.length} spans across ${services.length} service${services.length !== 1 ? "s" : ""}`}
-					headerActions={
-						<div className="flex items-center gap-2">
-							<TraceReplayLink traceId={traceId} />
-						</div>
-					}
-				>
-					<div className="flex flex-1 flex-col gap-y-3 min-h-0">
-						<div className="flex flex-wrap items-center gap-2 shrink-0">
-							<span className="text-xs text-muted-foreground">Services:</span>
-							{services.map((service: string) => (
-								<Badge
-									key={service}
-									variant="outline"
-									className="font-mono text-xs"
-									style={{ color: getServiceLegendColor(service, services) }}
-								>
-									{service}
-								</Badge>
-							))}
-
-							<span className="ml-4 text-xs text-muted-foreground">Duration:</span>
-							<Badge variant="secondary" className="font-mono text-xs">
-								{formatDuration(data.totalDurationMs)}
-							</Badge>
-
-							<span className="ml-4 text-xs text-muted-foreground">Status:</span>
-							<Badge
-								variant="secondary"
-								className={
-									hasError
-										? "bg-severity-error/15 text-severity-error"
-										: "bg-severity-info/15 text-severity-info"
-								}
-							>
-								{hasError ? "Error" : "OK"}
-							</Badge>
-
-							{rootHttpInfo?.statusCode != null && (
-								<>
-									<span className="ml-4 text-xs text-muted-foreground">HTTP:</span>
-									<Badge
-										variant="secondary"
-										className={
-											rootHttpInfo.statusCode >= 500
-												? "bg-severity-error/15 text-severity-error"
-												: rootHttpInfo.statusCode >= 400
-													? "bg-severity-warn/15 text-severity-warn"
-													: rootHttpInfo.statusCode >= 300
-														? "bg-chart-p50/15 text-chart-p50"
-														: "bg-severity-info/15 text-severity-info"
-										}
-									>
-										{rootHttpInfo.statusCode}
-									</Badge>
-								</>
-							)}
-
-							{deploymentEnv && (
-								<>
-									<span className="ml-4 text-xs text-muted-foreground">Environment:</span>
-									<Badge
-										variant="secondary"
-										className={
-											deploymentEnv === "production"
-												? "bg-severity-warn/15 text-severity-warn"
-												: "bg-chart-p50/15 text-chart-p50"
-										}
-									>
-										{deploymentEnv}
-									</Badge>
-								</>
-							)}
-
-							{commitSha && (
-								<>
-									<span className="ml-4 text-xs text-muted-foreground">Commit:</span>
-									<CopyableBadge
-										value={commitSha}
-										label="commit SHA"
-										className="font-mono text-xs"
-									>
-										{commitSha.slice(0, 7)}
-									</CopyableBadge>
-								</>
-							)}
-
-							<span className="ml-4 text-xs text-muted-foreground">Trace ID:</span>
-							<TraceIdBadge
-								traceId={traceId}
-								size="default"
-								className="text-xs max-w-[10rem]"
-							/>
-						</div>
-
-						<ResizablePanelGroup
-							orientation="horizontal"
-							className="flex-1 min-h-0 rounded-md border overflow-hidden"
-						>
-							<ResizablePanel defaultSize={selectedSpan ? 60 : 100} minSize={40}>
-								<TraceViewTabs
-									rootSpans={data.rootSpans}
-									spans={data.spans}
-									totalDurationMs={data.totalDurationMs}
-									traceStartTime={traceStartTime}
-									services={services}
-									selectedSpanId={selectedSpan?.spanId}
-									onSelectSpan={handleSelectSpan}
-								/>
-							</ResizablePanel>
-
-							{selectedSpan && (
-								<>
-									<ResizableHandle withHandle />
-									<ResizablePanel defaultSize={40} minSize={25}>
-										<SpanDetailPanel
-											span={selectedSpan}
-											services={services}
-											onClose={handleCloseSpanDetails}
-										/>
-									</ResizablePanel>
-								</>
-							)}
-						</ResizablePanelGroup>
-					</div>
-				</DashboardLayout>
+				<TraceDetailContent
+					data={data}
+					traceId={traceId}
+					backToTracesHref={backToTracesHref}
+				/>
 			)
 		})
 		.render()
+}
+
+function TraceDetailContent({
+	data,
+	traceId,
+	backToTracesHref,
+}: {
+	data: SpanHierarchyResponse
+	traceId: string
+	backToTracesHref: string
+}) {
+	const search = Route.useSearch()
+	const navigate = useNavigate({ from: Route.fullPath })
+
+	const selectedSpan = React.useMemo(
+		() => (search.spanId ? (findSpanById(data.rootSpans, search.spanId) ?? null) : null),
+		[data.rootSpans, search.spanId],
+	)
+
+	const handleSelectSpan = React.useCallback(
+		(span: SpanNode) => {
+			if (search.spanId === span.spanId) return
+			navigate({
+				search: (prev: Record<string, unknown>) => ({ ...prev, spanId: span.spanId }),
+				replace: true,
+			})
+		},
+		[search.spanId, navigate],
+	)
+
+	const handleCloseSpanDetails = React.useCallback(() => {
+		navigate({
+			search: (prev: Record<string, unknown>) => ({ ...prev, spanId: undefined }),
+			replace: true,
+		})
+	}, [navigate])
+
+	const services = React.useMemo(
+		() => [...new Set(data.spans.map((s: Span) => s.serviceName))],
+		[data.spans],
+	)
+
+	const traceStartTime = React.useMemo(
+		() =>
+			data.spans.length > 0
+				? data.spans.reduce((earliest, span) =>
+						new Date(span.startTime) < new Date(earliest.startTime) ? span : earliest,
+					).startTime
+				: new Date().toISOString(),
+		[data.spans],
+	)
+
+	const rootSpan = data.rootSpans[0]
+	const rootHttpInfo = rootSpan ? getHttpInfo(rootSpan) : null
+	const deploymentEnv = rootSpan?.resourceAttributes?.["deployment.environment"]
+	const commitSha = rootSpan?.resourceAttributes?.["deployment.commit_sha"]
+	const hasError = data.spans.some((s: Span) => {
+		if (s.statusCode === "Error") return true
+		const httpStatus = s.spanAttributes?.["http.status_code"]
+		if (httpStatus) {
+			const code = typeof httpStatus === "string" ? parseInt(httpStatus) : httpStatus
+			if (typeof code === "number" && code >= 500) return true
+		}
+		return false
+	})
+
+	return (
+		<DashboardLayout
+			breadcrumbs={[
+				{ label: "Traces", href: backToTracesHref },
+				{ label: traceId.slice(0, 8) },
+			]}
+			title={rootHttpInfo ? undefined : (rootSpan?.spanName ?? "Unknown Trace")}
+			titleContent={
+				rootHttpInfo ? (
+					<h1 className="min-w-0">
+						<HttpSpanLabel
+							spanName={rootSpan.spanName}
+							spanAttributes={rootSpan.spanAttributes}
+							spanKind={rootSpan.spanKind}
+							className="gap-3 text-2xl font-bold tracking-tight"
+							textClassName="text-2xl font-bold tracking-tight"
+						/>
+					</h1>
+				) : undefined
+			}
+			description={`${data.spans.length} spans across ${services.length} service${services.length !== 1 ? "s" : ""}`}
+			headerActions={
+				<div className="flex items-center gap-2">
+					<TraceReplayLink traceId={traceId} />
+				</div>
+			}
+		>
+			<div className="flex flex-1 flex-col gap-y-3 min-h-0">
+				<div className="flex flex-wrap items-center gap-2 shrink-0">
+					<span className="text-xs text-muted-foreground">Services:</span>
+					{services.map((service: string) => (
+						<Badge
+							key={service}
+							variant="outline"
+							className="font-mono text-xs"
+							style={{ color: getServiceLegendColor(service, services) }}
+						>
+							{service}
+						</Badge>
+					))}
+
+					<span className="ml-4 text-xs text-muted-foreground">Duration:</span>
+					<Badge variant="secondary" className="font-mono text-xs">
+						{formatDuration(data.totalDurationMs)}
+					</Badge>
+
+					<span className="ml-4 text-xs text-muted-foreground">Status:</span>
+					<Badge
+						variant="secondary"
+						className={
+							hasError
+								? "bg-severity-error/15 text-severity-error"
+								: "bg-severity-info/15 text-severity-info"
+						}
+					>
+						{hasError ? "Error" : "OK"}
+					</Badge>
+
+					{rootHttpInfo?.statusCode != null && (
+						<>
+							<span className="ml-4 text-xs text-muted-foreground">HTTP:</span>
+							<Badge
+								variant="secondary"
+								className={
+									rootHttpInfo.statusCode >= 500
+										? "bg-severity-error/15 text-severity-error"
+										: rootHttpInfo.statusCode >= 400
+											? "bg-severity-warn/15 text-severity-warn"
+											: rootHttpInfo.statusCode >= 300
+												? "bg-chart-p50/15 text-chart-p50"
+												: "bg-severity-info/15 text-severity-info"
+								}
+							>
+								{rootHttpInfo.statusCode}
+							</Badge>
+						</>
+					)}
+
+					{deploymentEnv && (
+						<>
+							<span className="ml-4 text-xs text-muted-foreground">Environment:</span>
+							<Badge
+								variant="secondary"
+								className={
+									deploymentEnv === "production"
+										? "bg-severity-warn/15 text-severity-warn"
+										: "bg-chart-p50/15 text-chart-p50"
+								}
+							>
+								{deploymentEnv}
+							</Badge>
+						</>
+					)}
+
+					{commitSha && (
+						<>
+							<span className="ml-4 text-xs text-muted-foreground">Commit:</span>
+							<CopyableBadge
+								value={commitSha}
+								label="commit SHA"
+								className="font-mono text-xs"
+							>
+								{commitSha.slice(0, 7)}
+							</CopyableBadge>
+						</>
+					)}
+
+					<span className="ml-4 text-xs text-muted-foreground">Trace ID:</span>
+					<TraceIdBadge
+						traceId={traceId}
+						size="default"
+						className="text-xs max-w-[10rem]"
+					/>
+				</div>
+
+				<ResizablePanelGroup
+					orientation="horizontal"
+					className="flex-1 min-h-0 rounded-md border overflow-hidden"
+				>
+					<ResizablePanel defaultSize={selectedSpan ? 60 : 100} minSize={40}>
+						<TraceViewTabs
+							rootSpans={data.rootSpans}
+							spans={data.spans}
+							totalDurationMs={data.totalDurationMs}
+							traceStartTime={traceStartTime}
+							services={services}
+							selectedSpanId={selectedSpan?.spanId}
+							onSelectSpan={handleSelectSpan}
+						/>
+					</ResizablePanel>
+
+					{selectedSpan && (
+						<>
+							<ResizableHandle withHandle />
+							<ResizablePanel defaultSize={40} minSize={25}>
+								<SpanDetailPanel
+									span={selectedSpan}
+									services={services}
+									onClose={handleCloseSpanDetails}
+								/>
+							</ResizablePanel>
+						</>
+					)}
+				</ResizablePanelGroup>
+			</div>
+		</DashboardLayout>
+	)
 }

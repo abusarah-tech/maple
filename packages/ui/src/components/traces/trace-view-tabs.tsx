@@ -58,7 +58,7 @@ export function TraceViewTabs({
 					</TabsTrigger>
 				</TabsList>
 
-				<TabsContent value="waterfall" className="flex-1 min-h-0 overflow-auto">
+				<TabsContent value="waterfall" className="flex-1 min-h-0">
 					<SpanHierarchy />
 				</TabsContent>
 

@@ -1,3 +1,4 @@
+import * as React from "react"
 import { ChevronRightIcon, ChevronDownIcon } from "../icons"
 
 import { Badge } from "../ui/badge"
@@ -17,7 +18,7 @@ interface SpanRowProps {
 	traceStartTime: string
 	services: string[]
 	expanded: boolean
-	onToggle: () => void
+	onToggle: (span: SpanNode) => void
 	isSelected?: boolean
 	onSelect?: (span: SpanNode) => void
 }
@@ -36,7 +37,7 @@ const kindLabels: Record<string, string> = {
 	SPAN_KIND_INTERNAL: "Internal",
 }
 
-export function SpanRow({
+function SpanRowImpl({
 	span,
 	totalDurationMs,
 	traceStartTime,
@@ -67,7 +68,7 @@ export function SpanRow({
 							aria-label={expanded ? "Collapse span" : "Expand span"}
 							onClick={(e) => {
 								e.stopPropagation()
-								onToggle()
+								onToggle(span)
 							}}
 						>
 							{expanded ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
@@ -157,7 +158,7 @@ export function SpanRow({
 						aria-label={expanded ? "Collapse span" : "Expand span"}
 						onClick={(e) => {
 							e.stopPropagation()
-							onToggle()
+							onToggle(span)
 						}}
 					>
 						{expanded ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
@@ -251,3 +252,5 @@ export function SpanRow({
 		</div>
 	)
 }
+
+export const SpanRow = React.memo(SpanRowImpl)

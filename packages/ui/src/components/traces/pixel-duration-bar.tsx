@@ -1,3 +1,5 @@
+import * as React from "react"
+
 const TOTAL_BLOCKS = 27
 
 interface PixelDurationBarProps {
@@ -6,7 +8,7 @@ interface PixelDurationBarProps {
 	color: string
 }
 
-export function PixelDurationBar({ leftPercent, widthPercent, color }: PixelDurationBarProps) {
+function PixelDurationBarImpl({ leftPercent, widthPercent, color }: PixelDurationBarProps) {
 	const spanStart = leftPercent
 	const spanEnd = leftPercent + widthPercent
 
@@ -27,3 +29,5 @@ export function PixelDurationBar({ leftPercent, widthPercent, color }: PixelDura
 		</div>
 	)
 }
+
+export const PixelDurationBar = React.memo(PixelDurationBarImpl)

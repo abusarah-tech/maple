@@ -1,10 +1,30 @@
 import * as React from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
 
 import { Button } from "../ui/button"
 import { SpanRow } from "./span-row"
 import { useTraceView } from "./trace-view-context"
 import { collectAllCollapsibleIds, computeDefaultExpandedSpanIds } from "./auto-collapse"
 import type { SpanNode } from "../../lib/types"
+
+// Estimated row height; the virtualizer self-corrects via measureElement.
+const ROW_HEIGHT = 33
+
+/** Flatten the tree into the ordered list of rows currently visible (i.e. every
+ *  ancestor is expanded). `node.depth` already carries the indentation level. */
+function flattenVisible(
+	nodes: SpanNode[],
+	expanded: Set<string>,
+	out: SpanNode[] = [],
+): SpanNode[] {
+	for (const node of nodes) {
+		out.push(node)
+		if (expanded.has(node.spanId) && node.children.length > 0) {
+			flattenVisible(node.children, expanded, out)
+		}
+	}
+	return out
+}
 
 export function SpanHierarchy() {
 	const { rootSpans, totalDurationMs, traceStartTime, services, selectedSpanId, onSelectSpan } =
@@ -14,38 +34,32 @@ export function SpanHierarchy() {
 		return computeDefaultExpandedSpanIds(rootSpans, { keepVisibleSpanId: selectedSpanId })
 	})
 
-	const toggleSpan = (spanId: string) => {
+	const toggleSpan = React.useCallback((span: SpanNode) => {
 		setExpandedSpans((prev) => {
 			const next = new Set(prev)
-			if (next.has(spanId)) {
-				next.delete(spanId)
+			if (next.has(span.spanId)) {
+				next.delete(span.spanId)
 			} else {
-				next.add(spanId)
+				next.add(span.spanId)
 			}
 			return next
 		})
-	}
+	}, [])
 
-	const renderSpanTree = (nodes: SpanNode[]): React.ReactNode => {
-		return nodes.map((node) => {
-			const isExpanded = expandedSpans.has(node.spanId)
-			return (
-				<React.Fragment key={node.spanId}>
-					<SpanRow
-						span={node}
-						totalDurationMs={totalDurationMs}
-						traceStartTime={traceStartTime}
-						services={services}
-						expanded={isExpanded}
-						onToggle={() => toggleSpan(node.spanId)}
-						isSelected={selectedSpanId === node.spanId}
-						onSelect={onSelectSpan}
-					/>
-					{isExpanded && node.children.length > 0 && renderSpanTree(node.children)}
-				</React.Fragment>
-			)
-		})
-	}
+	const flat = React.useMemo(
+		() => flattenVisible(rootSpans, expandedSpans),
+		[rootSpans, expandedSpans],
+	)
+
+	const scrollRef = React.useRef<HTMLDivElement>(null)
+
+	const virtualizer = useVirtualizer({
+		count: flat.length,
+		getScrollElement: () => scrollRef.current,
+		estimateSize: () => ROW_HEIGHT,
+		getItemKey: (index) => flat[index].spanId,
+		overscan: 12,
+	})
 
 	if (rootSpans.length === 0) {
 		return (
@@ -55,9 +69,11 @@ export function SpanHierarchy() {
 		)
 	}
 
+	const virtualItems = virtualizer.getVirtualItems()
+
 	return (
-		<div className="rounded-md border">
-			<div className="flex items-center border-b bg-muted/30 px-2 py-1.5 text-xs font-medium text-muted-foreground">
+		<div className="flex h-full flex-col overflow-hidden rounded-md border">
+			<div className="flex shrink-0 items-center border-b bg-muted/30 px-2 py-1.5 text-xs font-medium text-muted-foreground">
 				{/* Left section header */}
 				<div className="flex items-center gap-2 flex-1 min-w-0">
 					<div className="flex items-center gap-0.5">
@@ -86,7 +102,39 @@ export function SpanHierarchy() {
 					<span className="w-14 text-center">Status</span>
 				</div>
 			</div>
-			<div className="divide-y-0">{renderSpanTree(rootSpans)}</div>
+
+			<div ref={scrollRef} className="flex-1 min-h-0 overflow-auto">
+				<div style={{ height: virtualizer.getTotalSize(), position: "relative", width: "100%" }}>
+					{virtualItems.map((virtualRow) => {
+						const node = flat[virtualRow.index]
+						return (
+							<div
+								key={node.spanId}
+								ref={virtualizer.measureElement}
+								data-index={virtualRow.index}
+								style={{
+									position: "absolute",
+									top: 0,
+									left: 0,
+									width: "100%",
+									transform: `translateY(${virtualRow.start}px)`,
+								}}
+							>
+								<SpanRow
+									span={node}
+									totalDurationMs={totalDurationMs}
+									traceStartTime={traceStartTime}
+									services={services}
+									expanded={expandedSpans.has(node.spanId)}
+									onToggle={toggleSpan}
+									isSelected={selectedSpanId === node.spanId}
+									onSelect={onSelectSpan}
+								/>
+							</div>
+						)
+					})}
+				</div>
+			</div>
 		</div>
 	)
 }
