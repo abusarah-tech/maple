@@ -1,5 +1,5 @@
 import { Result, useAtomRefresh, useAtomSet, useAtomValue } from "@/lib/effect-atom"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Exit, Option } from "effect"
 import { toast } from "sonner"
 import { formatBackendError } from "@/lib/error-messages"
@@ -74,7 +74,7 @@ export function OrgClickHouseSettingsSection({ isAdmin, hasEntitlement }: OrgCli
 	const [chPassword, setChPassword] = useState("")
 	const [chDatabase, setChDatabase] = useState("default")
 	const [isSaving, setIsSaving] = useState(false)
-	const [isApplying, setIsApplying] = useState(false)
+	const [isStarting, setIsStarting] = useState(false)
 	const [isRefreshingDiff, setIsRefreshingDiff] = useState(false)
 	const [disableOpen, setDisableOpen] = useState(false)
 	const [isDisabling, setIsDisabling] = useState(false)
@@ -87,6 +87,10 @@ export function OrgClickHouseSettingsSection({ isAdmin, hasEntitlement }: OrgCli
 	const diffQueryAtom = MapleApiAtomClient.query("orgClickHouseSettings", "schemaDiff", {})
 	const diffResult = useAtomValue(diffQueryAtom)
 	const refreshDiff = useAtomRefresh(diffQueryAtom)
+
+	const statusQueryAtom = MapleApiAtomClient.query("orgClickHouseSettings", "applySchemaStatus", {})
+	const statusResult = useAtomValue(statusQueryAtom)
+	const refreshStatus = useAtomRefresh(statusQueryAtom)
 
 	const upsertMutation = useAtomSet(MapleApiAtomClient.mutation("orgClickHouseSettings", "upsert"), {
 		mode: "promiseExit",
@@ -106,8 +110,37 @@ export function OrgClickHouseSettingsSection({ isAdmin, hasEntitlement }: OrgCli
 		.onSuccess((value) => value)
 		.orElse(() => null)
 
+	const applyStatus = Result.builder(statusResult)
+		.onSuccess((value) => value)
+		.orElse(() => null)
+
+	const runActive = applyStatus?.status === "queued" || applyStatus?.status === "running"
+	const isApplying = isStarting || runActive
 	const configured = settings?.configured === true
 	const isBusy = isSaving || isApplying || isRefreshingDiff || isDisabling
+
+	// Poll the background apply run while it's active.
+	useEffect(() => {
+		if (!runActive) return
+		const id = setInterval(() => refreshStatus(), 2000)
+		return () => clearInterval(id)
+	}, [runActive, refreshStatus])
+
+	// Toast + refresh the diff on terminal transitions (running → succeeded/failed).
+	const prevApplyStatusRef = useRef<string | null>(null)
+	useEffect(() => {
+		const status = applyStatus?.status ?? null
+		const prev = prevApplyStatusRef.current
+		prevApplyStatusRef.current = status
+		if (prev !== "queued" && prev !== "running") return
+		if (status === "succeeded") {
+			refreshSettings()
+			refreshDiff()
+			toast.success("Schema applied")
+		} else if (status === "failed") {
+			toast.error(applyStatus?.errorMessage ?? "Schema apply failed")
+		}
+	}, [applyStatus?.status, applyStatus?.errorMessage, refreshSettings, refreshDiff])
 
 	useEffect(() => {
 		if (settings?.chUrl != null) setChUrl(settings.chUrl)
@@ -162,28 +195,24 @@ export function OrgClickHouseSettingsSection({ isAdmin, hasEntitlement }: OrgCli
 	}
 
 	async function handleApply() {
-		setIsApplying(true)
+		// Apply now runs in a background workflow (heavy backfill migrations can't
+		// fit one request). Kick it off, then the status poll drives progress.
+		setIsStarting(true)
 		const result = await applyMutation({})
-		setIsApplying(false)
 
 		if (Exit.isSuccess(result)) {
-			refreshSettings()
-			refreshDiff()
-			const value = result.value
-			const appliedCount = value.applied.length
-			const skippedCount = value.skipped.length
-			if (appliedCount === 0 && skippedCount === 0) {
-				toast.success("Schema is already up to date")
-			} else if (skippedCount === 0) {
-				toast.success(`Applied ${appliedCount} schema item${appliedCount === 1 ? "" : "s"}`)
+			refreshStatus()
+			if (result.value.status === "already_running") {
+				toast.info("A schema apply is already in progress")
 			} else {
-				toast.warning(
-					`Applied ${appliedCount}, skipped ${skippedCount} drifted item${skippedCount === 1 ? "" : "s"}`,
-				)
+				toast.message("Schema apply started")
 			}
+			// Hand off to the status poll; keep the button busy until it reports active.
+			setTimeout(() => setIsStarting(false), 1500)
 			return
 		}
-		toast.error(getExitErrorMessage(result, "Failed to apply schema"))
+		setIsStarting(false)
+		toast.error(getExitErrorMessage(result, "Failed to start schema apply"))
 	}
 
 	async function handleRefreshDiff() {
@@ -492,7 +521,9 @@ export function OrgClickHouseSettingsSection({ isAdmin, hasEntitlement }: OrgCli
 									{isApplying ? (
 										<>
 											<LoaderIcon size={12} className="mr-1 animate-spin" />
-											Applying…
+											{runActive && applyStatus?.stepsTotal != null && applyStatus?.stepsDone != null
+												? `Applying… (${applyStatus.stepsDone}/${applyStatus.stepsTotal})`
+												: "Applying…"}
 										</>
 									) : diffSummary && diffSummary.missing > 0 ? (
 										`Apply schema (${diffSummary.missing} missing${diffSummary.drifted > 0 ? `, ${diffSummary.drifted} skipped` : ""})`
@@ -501,6 +532,18 @@ export function OrgClickHouseSettingsSection({ isAdmin, hasEntitlement }: OrgCli
 									)}
 								</Button>
 							</div>
+							{runActive && (
+								<p className="text-sm text-muted-foreground">
+									{applyStatus?.phase ?? "Applying schema…"}
+									{applyStatus?.currentMigration != null
+										? ` · migration ${applyStatus.currentMigration}`
+										: ""}
+									{" — runs in the background; safe to leave this page."}
+								</p>
+							)}
+							{applyStatus?.status === "failed" && applyStatus.errorMessage && (
+								<p className="text-sm text-destructive">{applyStatus.errorMessage}</p>
+							)}
 						</CardContent>
 					</Card>
 				) : null}

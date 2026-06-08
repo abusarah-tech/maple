@@ -23,4 +23,11 @@
 			"id": "00000000000000000000000000000000",
 		},
 	],
+	"workflows": [
+		{
+			"name": "clickhouse-schema-apply-workflow",
+			"binding": "CLICKHOUSE_SCHEMA_APPLY_WORKFLOW",
+			"class_name": "ClickHouseSchemaApplyWorkflow",
+		},
+	],
 }

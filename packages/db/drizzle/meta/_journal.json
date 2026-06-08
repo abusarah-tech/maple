@@ -127,6 +127,13 @@
       "when": 1780588258189,
       "tag": "0017_blue_kid_colt",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1780939911112,
+      "tag": "0018_overconfident_captain_america",
+      "breakpoints": true
     }
   ]
 }

@@ -142,6 +142,35 @@ export class OrgClickHouseApplySchemaResult extends Schema.Class<OrgClickHouseAp
 }) {}
 
 /**
+ * Result of kicking off an apply. The actual work runs in a background
+ * Cloudflare Workflow (heavy backfill migrations can't fit one request), so the
+ * endpoint returns immediately and the client polls {@link OrgClickHouseApplySchemaStatus}.
+ * `started` = a new run was queued; `already_running` = a run was already active.
+ */
+export class OrgClickHouseApplySchemaStarted extends Schema.Class<OrgClickHouseApplySchemaStarted>(
+	"OrgClickHouseApplySchemaStarted",
+)({
+	status: Schema.Literals(["started", "already_running"]),
+}) {}
+
+/** Live progress of the background schema-apply run for an org. */
+export class OrgClickHouseApplySchemaStatus extends Schema.Class<OrgClickHouseApplySchemaStatus>(
+	"OrgClickHouseApplySchemaStatus",
+)({
+	/** "idle" when no run has ever started; otherwise the run's lifecycle state. */
+	status: Schema.Literals(["idle", "queued", "running", "succeeded", "failed"]),
+	/** Human-readable current phase, e.g. "migration 4 · backfill:trace_list_mv:2026-01-03". */
+	phase: Schema.NullOr(Schema.String),
+	currentMigration: Schema.NullOr(Schema.Number),
+	stepsTotal: Schema.NullOr(Schema.Number),
+	stepsDone: Schema.NullOr(Schema.Number),
+	appliedVersions: Schema.Array(Schema.Number),
+	errorMessage: Schema.NullOr(Schema.String),
+	startedAt: Schema.NullOr(Schema.Number),
+	finishedAt: Schema.NullOr(Schema.Number),
+}) {}
+
+/**
  * Pre-rendered OpenTelemetry Collector YAML for an org's ClickHouse backend.
  *
  * Lets a customer skip the "compose your own collector config" step — they
@@ -249,8 +278,10 @@ export class OrgClickHouseSettingsApiGroup extends HttpApiGroup.make("orgClickHo
 		}),
 	)
 	.add(
+		// Kicks off the background apply Workflow and returns immediately. Heavy
+		// backfill migrations run as chunked durable steps; poll `applySchemaStatus`.
 		HttpApiEndpoint.post("applySchema", "/apply-schema", {
-			success: OrgClickHouseApplySchemaResult,
+			success: OrgClickHouseApplySchemaStarted,
 			error: [
 				OrgClickHouseSettingsForbiddenError,
 				OrgClickHouseSettingsValidationError,
@@ -258,6 +289,15 @@ export class OrgClickHouseSettingsApiGroup extends HttpApiGroup.make("orgClickHo
 				OrgClickHouseSettingsEncryptionError,
 				OrgClickHouseSettingsUpstreamRejectedError,
 				OrgClickHouseSettingsUpstreamUnavailableError,
+			],
+		}),
+	)
+	.add(
+		HttpApiEndpoint.get("applySchemaStatus", "/apply-schema/status", {
+			success: OrgClickHouseApplySchemaStatus,
+			error: [
+				OrgClickHouseSettingsForbiddenError,
+				OrgClickHouseSettingsPersistenceError,
 			],
 		}),
 	)

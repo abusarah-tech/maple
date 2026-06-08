@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest"
+import { isBackfill, renderStatementFull, type BackfillSpec } from "../backfill"
 import { migration_0004_service_namespace_projections } from "./0004_service_namespace_projections"
 import { migrations } from "./index"
+
+const backfills = migration_0004_service_namespace_projections.statements.filter(
+	isBackfill,
+) as ReadonlyArray<BackfillSpec>
+
+// Full rendered SQL (structural strings + backfills rendered to their full
+// INSERT…SELECT, qualified into `default`) — what the non-chunking path runs.
+const renderedSql = migration_0004_service_namespace_projections.statements
+	.map((s) => renderStatementFull(s, "default"))
+	.join("\n\n")
 
 describe("ClickHouse migrations", () => {
 	it("keeps service.namespace migration ordered after the previous deltas", () => {
@@ -9,64 +20,60 @@ describe("ClickHouse migrations", () => {
 	})
 
 	it("rebuilds namespace-aware log aggregates and recreates affected materialized views", () => {
-		const sql = migration_0004_service_namespace_projections.statements.join("\n\n")
-
-		expect(sql).toContain("ServiceNamespace LowCardinality(String) DEFAULT ''")
-		expect(sql).toContain("CREATE TABLE IF NOT EXISTS logs_aggregates_hourly__v4")
-		expect(sql).toContain(
+		expect(renderedSql).toContain("ServiceNamespace LowCardinality(String) DEFAULT ''")
+		expect(renderedSql).toContain("logs_aggregates_hourly__v4")
+		expect(renderedSql).toContain(
 			"ORDER BY (OrgId, Hour, ServiceName, SeverityText, DeploymentEnv, ServiceNamespace)",
 		)
-		expect(sql).toContain("RENAME TABLE logs_aggregates_hourly TO logs_aggregates_hourly__v4_old")
-		expect(sql).toContain("CREATE MATERIALIZED VIEW IF NOT EXISTS service_overview_spans_mv")
-		expect(sql).toContain("CREATE MATERIALIZED VIEW IF NOT EXISTS trace_list_mv_mv")
-		expect(sql).toContain("CREATE MATERIALIZED VIEW IF NOT EXISTS logs_aggregates_hourly_mv")
-		expect(sql).toContain("INDEX idx_service_namespace ServiceNamespace TYPE set(1000) GRANULARITY 4")
+		expect(renderedSql).toContain("RENAME TABLE")
+		expect(renderedSql).toContain("service_overview_spans_mv")
+		expect(renderedSql).toContain("trace_list_mv_mv")
+		expect(renderedSql).toContain("logs_aggregates_hourly_mv")
+		expect(renderedSql).toContain(
+			"INDEX idx_service_namespace ServiceNamespace TYPE set(1000) GRANULARITY 4",
+		)
 	})
 
-	it("uses explicit column lists for namespace backfills so appended columns do not drift by position", () => {
-		const sql = migration_0004_service_namespace_projections.statements.join("\n\n")
+	it("expresses the three heavy backfills as chunkable specs with explicit column lists", () => {
+		// service_overview_spans + trace_list_mv from traces, logs aggregate from logs.
+		expect(backfills.map((b) => b.target).sort()).toEqual([
+			"logs_aggregates_hourly__v4",
+			"service_overview_spans",
+			"trace_list_mv",
+		])
 
-		expect(sql).not.toMatch(
-			/INSERT INTO (service_overview_spans|trace_list_mv|logs_aggregates_hourly__v4)\s+SELECT/,
+		const byTarget = Object.fromEntries(backfills.map((b) => [b.target, b]))
+		expect(byTarget.service_overview_spans?.from).toBe("traces")
+		expect(byTarget.service_overview_spans?.tsColumn).toBe("Timestamp")
+		expect(byTarget.trace_list_mv?.from).toBe("traces")
+		expect(byTarget.logs_aggregates_hourly__v4?.from).toBe("logs")
+		expect(byTarget.logs_aggregates_hourly__v4?.tsColumn).toBe("TimestampTime")
+		expect(byTarget.logs_aggregates_hourly__v4?.groupBy).toContain("OrgId, Hour")
+
+		// Explicit column lists so appended columns never drift by position.
+		expect(byTarget.service_overview_spans?.columns).toEqual([
+			"OrgId",
+			"Timestamp",
+			"ServiceName",
+			"Duration",
+			"StatusCode",
+			"TraceState",
+			"DeploymentEnv",
+			"CommitSha",
+			"SampleRate",
+			"ServiceNamespace",
+		])
+		expect(byTarget.trace_list_mv?.columns).toContain("ServiceNamespace")
+		expect(byTarget.trace_list_mv?.columns).toContain("HasError")
+	})
+
+	it("renders backfills to positional-safe INSERT … (col, …) SELECT", () => {
+		// No bare positional INSERT … SELECT (would silently drift on appended cols).
+		expect(renderedSql).not.toMatch(
+			/INSERT INTO `default`\.`(service_overview_spans|trace_list_mv|logs_aggregates_hourly__v4)` SELECT/,
 		)
-		expect(sql).toContain(`INSERT INTO service_overview_spans (
-  OrgId,
-  Timestamp,
-  ServiceName,
-  Duration,
-  StatusCode,
-  TraceState,
-  DeploymentEnv,
-  CommitSha,
-  SampleRate,
-  ServiceNamespace
-)`)
-		expect(sql).toContain(`INSERT INTO trace_list_mv (
-  OrgId,
-  TraceId,
-  Timestamp,
-  ServiceName,
-  SpanName,
-  SpanKind,
-  Duration,
-  StatusCode,
-  HttpMethod,
-  HttpRoute,
-  HttpStatusCode,
-  DeploymentEnv,
-  HasError,
-  TraceState,
-  ServiceNamespace
-)`)
-		expect(sql).toContain(`INSERT INTO logs_aggregates_hourly__v4 (
-  OrgId,
-  Hour,
-  ServiceName,
-  SeverityText,
-  DeploymentEnv,
-  Count,
-  SizeBytes,
-  ServiceNamespace
-)`)
+		expect(renderedSql).toContain(
+			"INSERT INTO `default`.`service_overview_spans` (OrgId, Timestamp, ServiceName,",
+		)
 	})
 })

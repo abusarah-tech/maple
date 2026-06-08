@@ -13,7 +13,21 @@ export {
 	type EngineFlavor,
 	type ResourceContent,
 } from "./ddl-emitter"
-export { migrations, type ClickHouseMigration } from "./migrations"
+export { migrations, type ClickHouseMigration, type MigrationStatement } from "./migrations"
+export {
+	type BackfillSpec,
+	isBackfill,
+	SOURCE_TIME_COLUMNS,
+	renderBackfillFull,
+	renderStatementFull,
+	compileBackfillChunk,
+} from "./backfill"
+export {
+	expandMigrationToSteps,
+	expandBackfill,
+	type ApplyStep,
+	type ExecFn,
+} from "./apply-plan"
 export {
 	qualifyStatementForDatabase,
 	CLICKHOUSE_MV_SOURCE_TABLES,

@@ -10,8 +10,9 @@
  */
 
 import {
+	expandMigrationToSteps,
 	migrations as clickHouseMigrations,
-	qualifyStatementForDatabase,
+	renderStatementFull,
 } from "@maple/domain/clickhouse"
 import { exec, type ClickHouseConfig } from "./client"
 
@@ -48,8 +49,14 @@ export async function applyMigrations(config: ClickHouseConfig): Promise<ApplyRe
 			skipped.push({ version: migration.version, description: migration.description })
 			continue
 		}
-		for (const stmt of migration.statements) {
-			await exec(config, qualifyStatementForDatabase(stmt, config.database))
+		// Expand backfills into day-window chunks so a single huge INSERT…SELECT
+		// never holds one connection for minutes (which also trips port-forward /
+		// proxy idle timeouts). Structural DDL stays 1:1.
+		const steps = await expandMigrationToSteps(migration, config.database, (sql) =>
+			exec(config, sql),
+		)
+		for (const step of steps) {
+			await exec(config, step.sql)
 		}
 		await recordMigration(config, migration.version, migration.description)
 		applied.push({ version: migration.version, description: migration.description })
@@ -91,7 +98,7 @@ export async function dryRun(
 		if (!pending.has(migration.version)) continue
 		out.push({
 			version: migration.version,
-			statements: migration.statements.map((s) => qualifyStatementForDatabase(s, config.database)),
+			statements: migration.statements.map((s) => renderStatementFull(s, config.database)),
 		})
 	}
 	return out

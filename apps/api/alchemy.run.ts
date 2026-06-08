@@ -1,6 +1,6 @@
 import path from "node:path"
 import alchemy from "alchemy"
-import { D1Database, KVNamespace, Worker } from "alchemy/cloudflare"
+import { D1Database, KVNamespace, Worker, Workflow } from "alchemy/cloudflare"
 import type { MapleDomains, MapleStage } from "@maple/infra/cloudflare"
 import { resolveD1Name, resolveDeploymentEnvironment, resolveWorkerName } from "@maple/infra/cloudflare"
 
@@ -40,6 +40,14 @@ export const createMapleApi = async ({ stage, domains }: CreateMapleApiOptions) 
 		adopt: true,
 	})
 
+	// Long-running schema-apply: chunks heavy backfill migrations across durable
+	// steps so they never hit the Worker request budget. Class is exported from
+	// src/worker.ts.
+	const schemaApplyWorkflow = Workflow<{ orgId: string }>("clickhouse-schema-apply-workflow", {
+		workflowName: resolveWorkerName("schema-apply", stage),
+		className: "ClickHouseSchemaApplyWorkflow",
+	})
+
 	const worker = await Worker("api", {
 		name: resolveWorkerName("api", stage),
 		cwd: import.meta.dirname,
@@ -52,6 +60,7 @@ export const createMapleApi = async ({ stage, domains }: CreateMapleApiOptions) 
 		bindings: {
 			MAPLE_DB: mapleDb,
 			MCP_SESSIONS: mcpSessions,
+			CLICKHOUSE_SCHEMA_APPLY_WORKFLOW: schemaApplyWorkflow,
 			TINYBIRD_HOST: requireEnv("TINYBIRD_HOST"),
 			TINYBIRD_TOKEN: alchemy.secret(requireEnv("TINYBIRD_TOKEN")),
 			...optionalPlain("CLICKHOUSE_URL"),

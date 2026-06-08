@@ -1,6 +1,7 @@
 import {
 	IsoDateTimeString,
-	OrgClickHouseApplySchemaResult,
+	OrgClickHouseApplySchemaStarted,
+	OrgClickHouseApplySchemaStatus,
 	OrgClickHouseCollectorConfigResponse,
 	OrgClickHouseSchemaDiffResponse,
 	OrgClickHouseSettingsDeleteResponse,
@@ -20,16 +21,17 @@ import {
 	CLICKHOUSE_MV_SOURCE_TABLES,
 	clickHouseProjectRevision,
 	computeSchemaDiff,
-	extractColumnDefinition,
 	migrations as clickHouseMigrations,
 	parseEmittedStatement,
 	qualifyStatementForDatabase,
 	type ActualTable,
 	type DesiredTable,
 } from "@maple/domain/clickhouse"
-import { orgClickHouseSettings } from "@maple/db"
+import { orgClickHouseSchemaApplyRuns, orgClickHouseSettings } from "@maple/db"
 import { eq } from "drizzle-orm"
-import { Clock, Context, Effect, Layer, Option, Redacted, Ref, Schema } from "effect"
+import { WorkerEnvironment } from "@maple/effect-cloudflare/worker-environment"
+import { Clock, Context, Duration, Effect, Layer, Option, Redacted, Ref, Schedule, Schema } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import {
 	decryptAes256Gcm,
 	encryptAes256Gcm,
@@ -108,13 +110,17 @@ export interface OrgClickHouseSettingsServiceShape {
 		userId: UserId,
 		roles: ReadonlyArray<RoleName>,
 	) => Effect.Effect<
-		OrgClickHouseApplySchemaResult,
+		OrgClickHouseApplySchemaStarted,
 		| OrgClickHouseSettingsForbiddenError
 		| OrgClickHouseSettingsValidationError
 		| OrgClickHouseSettingsPersistenceError
-		| OrgClickHouseSettingsEncryptionError
-		| OrgClickHouseSettingsUpstreamRejectedError
-		| OrgClickHouseSettingsUpstreamUnavailableError
+	>
+	readonly applySchemaStatus: (
+		orgId: OrgId,
+		roles: ReadonlyArray<RoleName>,
+	) => Effect.Effect<
+		OrgClickHouseApplySchemaStatus,
+		OrgClickHouseSettingsForbiddenError | OrgClickHouseSettingsPersistenceError
 	>
 	readonly resolveRuntimeConfig: (
 		orgId: OrgId,
@@ -137,6 +143,22 @@ const toPersistenceError = (error: unknown) =>
 	new OrgClickHouseSettingsPersistenceError({
 		message: error instanceof Error ? error.message : "Org ClickHouse settings persistence failed",
 	})
+
+// Cloudflare Workflow binding that runs the actual (chunked, long-running)
+// schema apply. Resolved off the worker env at runtime — see `apply-schema`.
+const SCHEMA_APPLY_WORKFLOW_BINDING = "CLICKHOUSE_SCHEMA_APPLY_WORKFLOW"
+
+interface WorkflowBinding {
+	readonly create: (options?: {
+		readonly id?: string
+		readonly params?: { readonly orgId: string }
+	}) => Promise<unknown>
+}
+
+const isWorkflowBinding = (value: unknown): value is WorkflowBinding =>
+	typeof value === "object" &&
+	value !== null &&
+	typeof (value as { create?: unknown }).create === "function"
 
 const toEncryptionError = (message: string) => new OrgClickHouseSettingsEncryptionError({ message })
 
@@ -331,6 +353,9 @@ const decodeStatus = (raw: string | null | undefined): "connected" | "error" | n
 const parseDesiredTables = (): ReadonlyArray<DesiredTable> => {
 	const out: DesiredTable[] = []
 	for (const stmt of clickHouseMigrations[0]?.statements ?? []) {
+		// The snapshot (migration 0001) is pure DDL strings; backfill specs (only
+		// in later migrations) carry no desired-table shape, so skip them.
+		if (typeof stmt !== "string") continue
 		const parsed = parseEmittedStatement(stmt)
 		if (!parsed) continue
 		out.push({
@@ -345,7 +370,7 @@ const parseDesiredTables = (): ReadonlyArray<DesiredTable> => {
 
 // --- ClickHouse HTTP exec helpers --------------------------------------------
 
-interface ClickHouseExecConfig {
+export interface ClickHouseExecConfig {
 	readonly url: string
 	readonly user: string
 	readonly password: string
@@ -371,50 +396,132 @@ const buildClickHouseUrl = (config: ClickHouseExecConfig): string =>
 	// set, surfacing as `Code: 60. UNKNOWN_TABLE`.
 	`${config.url.replace(/\/$/, "")}/?database=${encodeURIComponent(config.database)}`
 
-const execClickHouse = (config: ClickHouseExecConfig, sql: string) =>
-	Effect.tryPromise({
-		try: async () => {
-			const response = await fetch(buildClickHouseUrl(config), {
-				method: "POST",
-				headers: buildClickHouseHeaders(config),
-				body: sql,
-			})
-			const text = await response.text()
-			if (!response.ok) {
-				const status = response.status
-				const message = text.split("\n")[0]?.slice(0, 500) ?? ""
-				if (status === 401 || status === 403) {
-					throw new OrgClickHouseSettingsUpstreamRejectedError({
-						message: `ClickHouse rejected credentials: ${message}`,
-						statusCode: status,
-					})
-				}
-				if (status >= 500) {
-					throw new OrgClickHouseSettingsUpstreamUnavailableError({
-						message: `ClickHouse upstream error (${status}): ${message}`,
-						statusCode: status,
-					})
-				}
-				throw new OrgClickHouseSettingsUpstreamRejectedError({
-					message: `ClickHouse rejected statement (${status}): ${message}`,
-					statusCode: status,
-				})
-			}
-			return text
-		},
-		catch: (error) => {
-			if (
-				error instanceof OrgClickHouseSettingsUpstreamRejectedError ||
-				error instanceof OrgClickHouseSettingsUpstreamUnavailableError
-			) {
-				return error
-			}
-			return new OrgClickHouseSettingsUpstreamUnavailableError({
-				message: `Could not reach ClickHouse: ${error instanceof Error ? error.message : String(error)}`,
-				statusCode: null,
-			})
-		},
-	})
+// Per-request timeout for ClickHouse HTTP calls. Maple's API runs on Cloudflare
+// Workers, whose *outbound* fetch is capped at ~100s — a hung request to an
+// unreachable/slow cluster would otherwise resolve to an opaque Cloudflare 524
+// (`error code: 524`) only after the full 100s. We abort well before that so the
+// failure is fast and the message is actionable. Metadata DDL + the system.*
+// introspection queries all respond in well under this.
+const CLICKHOUSE_EXEC_TIMEOUT_MS = 20_000
+
+// Retry only transient *infrastructure* failures (gateway/proxy 5xx, dropped
+// connections). NOT retried: ClickHouse query/DDL errors (HTTP 500 carries the
+// DB::Exception text — retrying a bad statement is pointless), and our own
+// request timeouts (statusCode 408 — a 20s hang won't clear on an immediate
+// retry; fail fast and let the user retry once the cluster is reachable).
+const CLICKHOUSE_RETRY_SCHEDULE = Schedule.exponential("100 millis", 2.0).pipe(
+	Schedule.both(Schedule.recurs(2)),
+)
+
+export const isRetryableUpstream = (
+	error: OrgClickHouseSettingsUpstreamRejectedError | OrgClickHouseSettingsUpstreamUnavailableError,
+): boolean => {
+	if (!(error instanceof OrgClickHouseSettingsUpstreamUnavailableError)) return false
+	const status = error.statusCode
+	if (status === null) return true // network-level failure (reset/refused) — cheap to retry
+	// Gateway/proxy codes that are typically transient. 500/501 are excluded:
+	// ClickHouse returns 500 for genuine SQL/DDL errors; 408 is our own timeout.
+	return status === 502 || status === 503 || status === 504 || (status >= 520 && status <= 529)
+}
+
+const describeUpstream5xx = (status: number, message: string): string => {
+	// A 52x with the literal `error code: 5xx` body is Cloudflare's synthetic
+	// timeout/origin-error page: Maple's Worker fetch to ClickHouse exceeded
+	// Cloudflare's ~100s edge timeout because the endpoint didn't respond.
+	if (status >= 520 && status <= 529) {
+		return (
+			`ClickHouse did not respond in time (Cloudflare ${status}). The cluster is unreachable ` +
+			`or too slow from Maple's network — check the endpoint's firewall / IP allowlist ` +
+			`(Maple's API egresses from Cloudflare and cannot be reliably IP-allowlisted; prefer ` +
+			`auth + TLS without source-IP restrictions) and that the cluster is up. Upstream: ${message}`
+		)
+	}
+	return `ClickHouse upstream error (${status}): ${message}`
+}
+
+const mapStatusToError = (
+	status: number,
+	text: string,
+): Effect.Effect<
+	never,
+	OrgClickHouseSettingsUpstreamRejectedError | OrgClickHouseSettingsUpstreamUnavailableError
+> => {
+	const message = text.split("\n")[0]?.slice(0, 500) ?? ""
+	if (status === 401 || status === 403) {
+		return Effect.fail(
+			new OrgClickHouseSettingsUpstreamRejectedError({
+				message: `ClickHouse rejected credentials: ${message}`,
+				statusCode: status,
+			}),
+		)
+	}
+	if (status >= 500) {
+		return Effect.fail(
+			new OrgClickHouseSettingsUpstreamUnavailableError({
+				message: describeUpstream5xx(status, message),
+				statusCode: status,
+			}),
+		)
+	}
+	return Effect.fail(
+		new OrgClickHouseSettingsUpstreamRejectedError({
+			message: `ClickHouse rejected statement (${status}): ${message}`,
+			statusCode: status,
+		}),
+	)
+}
+
+export const execClickHouse = (config: ClickHouseExecConfig, sql: string) =>
+	Effect.gen(function* () {
+		const client = yield* HttpClient.HttpClient
+		const request = HttpClientRequest.post(buildClickHouseUrl(config), {
+			headers: buildClickHouseHeaders(config),
+		}).pipe(HttpClientRequest.bodyText(sql))
+		const response = yield* client.execute(request)
+		const text = yield* response.text
+		return { status: response.status, text }
+	}).pipe(
+		// Transport-level failures (DNS, connection reset/refused, body read) →
+		// retryable "unreachable" with no status.
+		Effect.mapError(
+			(error) =>
+				new OrgClickHouseSettingsUpstreamUnavailableError({
+					message: `Could not reach ClickHouse: ${error.message}`,
+					statusCode: null,
+				}),
+		),
+		Effect.flatMap(
+			({
+				status,
+				text,
+			}): Effect.Effect<
+				string,
+				OrgClickHouseSettingsUpstreamRejectedError | OrgClickHouseSettingsUpstreamUnavailableError
+			> => (status >= 200 && status < 300 ? Effect.succeed(text) : mapStatusToError(status, text)),
+		),
+		// Per-attempt deadline. On timeout the fiber is interrupted — HttpClient
+		// passes the abort signal to fetch, so the in-flight request is actually
+		// cancelled — and we fail with a 408, excluded from the retry policy, so an
+		// unreachable cluster surfaces fast instead of riding Cloudflare's ~100s
+		// edge timeout into an opaque 524.
+		Effect.timeoutOrElse({
+			duration: Duration.millis(CLICKHOUSE_EXEC_TIMEOUT_MS),
+			orElse: () =>
+				Effect.fail(
+					new OrgClickHouseSettingsUpstreamUnavailableError({
+						message:
+							`Request to ClickHouse timed out after ${CLICKHOUSE_EXEC_TIMEOUT_MS / 1000}s. ` +
+							`The cluster is reachable but slow, or unreachable from Maple's network. ` +
+							`Maple's API egresses from Cloudflare — if your ClickHouse endpoint has an IP ` +
+							`allowlist / firewall it must accept that egress (prefer auth + TLS without ` +
+							`source-IP restrictions).`,
+						statusCode: 408,
+					}),
+				),
+		}),
+		Effect.retry({ schedule: CLICKHOUSE_RETRY_SCHEDULE, while: isRetryableUpstream }),
+		Effect.provide(FetchHttpClient.layer),
+	)
 
 interface ClickHouseTableRow {
 	readonly name: string
@@ -470,75 +577,10 @@ const parseJsonEachRow = <T>(text: string): ReadonlyArray<T> => {
 	return out
 }
 
-// ---------------------------------------------------------------------------
-// Linear migration runner
-//
-// `applySchema` is migration-aware: it replays the ordered `clickHouseMigrations`
-// deltas (the same list `@maple/clickhouse-cli` bundles) and tracks applied
-// versions in `_maple_schema_migrations`. This is what lets MV *body* changes
-// (a frozen `CREATE MATERIALIZED VIEW`) actually reach an existing cluster —
-// the snapshot diff below only does additive `ALTER TABLE ADD COLUMN` and a
-// presence-only MV check, so on its own it can never recreate a drifted MV.
-// The two stay compatible by using the identical bookkeeping table + protocol
-// as the CLI's `applyMigrations`.
-// ---------------------------------------------------------------------------
-
-const MIGRATIONS_TABLE = "_maple_schema_migrations"
-const quoteIdent = (name: string): string => `\`${name.replace(/`/g, "``")}\``
-
-const ensureMigrationsTable = (config: ClickHouseExecConfig) =>
-	execClickHouse(
-		config,
-		`CREATE TABLE IF NOT EXISTS ${quoteIdent(MIGRATIONS_TABLE)} (
-			version UInt32,
-			applied_at DateTime64(3) DEFAULT now64(3),
-			description String
-		) ENGINE = MergeTree ORDER BY version`,
-	)
-
-const readAppliedMigrationVersions = (config: ClickHouseExecConfig) =>
-	Effect.gen(function* () {
-		const text = yield* execClickHouse(
-			config,
-			`SELECT version FROM ${quoteIdent(MIGRATIONS_TABLE)} FORMAT JSONEachRow`,
-		)
-		return new Set(parseJsonEachRow<{ version: number }>(text).map((r) => Number(r.version)))
-	})
-
-const recordAppliedMigration = (config: ClickHouseExecConfig, version: number, description: string) =>
-	execClickHouse(
-		config,
-		`INSERT INTO ${quoteIdent(MIGRATIONS_TABLE)} (version, description) VALUES (${version}, '${description.replace(/'/g, "''")}')`,
-	)
-
-/**
- * Replay every bundled migration the target hasn't recorded yet, in order.
- * Each migration's statements run sequentially; the version is recorded only
- * after all its statements succeed. Returns human-readable labels of what ran.
- */
-const runPendingMigrations = Effect.fn("OrgClickHouseSettingsService.runPendingMigrations")(function* (
-	config: ClickHouseExecConfig,
-) {
-	yield* ensureMigrationsTable(config)
-	const applied = yield* readAppliedMigrationVersions(config)
-	const ran: string[] = []
-	yield* Effect.forEach(
-		clickHouseMigrations,
-		(migration) =>
-				Effect.gen(function* () {
-					if (applied.has(migration.version)) return
-				yield* Effect.forEach(
-					migration.statements,
-					(stmt) => execClickHouse(config, qualifyStatementForDatabase(stmt, config.database)),
-					{ concurrency: 1, discard: true },
-				)
-				yield* recordAppliedMigration(config, migration.version, migration.description)
-				ran.push(`migration ${migration.version}: ${migration.description}`)
-			}),
-		{ concurrency: 1, discard: true },
-	)
-	return ran
-})
+// The migration runner + backfill chunking now live in the background
+// schema-apply Workflow (apps/api/src/workflows/ClickHouseSchemaApplyWorkflow.run.ts),
+// which `applySchema` kicks off. The `_maple_schema_migrations` bookkeeping
+// protocol is shared with `@maple/clickhouse-cli`.
 
 // --- Service -----------------------------------------------------------------
 
@@ -550,6 +592,10 @@ export class OrgClickHouseSettingsService extends Context.Service<
 		const database = yield* Database
 		const env = yield* Env
 		const encryptionKey = yield* parseEncryptionKey(Redacted.value(env.MAPLE_INGEST_KEY_ENCRYPTION_KEY))
+		// Optional: present only inside a Worker isolate. Used to kick off the
+		// background schema-apply Workflow. Read optionally so non-worker/test
+		// contexts (where the binding is absent) still construct the service.
+		const workerEnv = yield* Effect.serviceOption(WorkerEnvironment)
 
 		// Memoize the parsed desired-schema snapshot per service instance. The
 		// snapshot is static, so we parse it at most once and reuse it.
@@ -777,6 +823,9 @@ export class OrgClickHouseSettingsService extends Context.Service<
 			})
 		})
 
+		// Kick off the background schema-apply Workflow. The heavy work (chunked
+		// backfill migrations + snapshot-diff reconcile) runs there so it never
+		// hits the Worker request budget; the client polls `applySchemaStatus`.
 		const applySchema = Effect.fn("OrgClickHouseSettingsService.applySchema")(function* (
 			orgId: OrgId,
 			userId: UserId,
@@ -785,138 +834,141 @@ export class OrgClickHouseSettingsService extends Context.Service<
 			yield* Effect.annotateCurrentSpan("orgId", orgId)
 			yield* Effect.annotateCurrentSpan("userId", userId)
 			yield* requireAdmin(roles)
-			const row = yield* requireActiveRow(orgId)
-			const config = yield* loadConfigForRow(row)
+			// Ensure BYO ClickHouse is configured before queuing a run.
+			yield* requireActiveRow(orgId)
 
-			const applied: string[] = []
-			const skipped: Array<{ name: string; reason: string }> = []
-
-			// Migration-aware step: replay ordered deltas (incl. MV DROP/CREATE
-			// recreations) the cluster hasn't recorded yet. The snapshot diff below
-			// then mops up any additive column drift not covered by a delta.
-			const ranMigrations = yield* runPendingMigrations(config)
-			applied.push(...ranMigrations)
-
-			const desired = yield* getDesiredTables
-			const desiredByName = new Map(desired.map((t) => [t.name, t]))
-			const actual = yield* fetchActualSchema(config)
-			const entries = computeSchemaDiff({ tables: desired }, actual)
-
-			// Track tables whose drift was *fully* resolved by additive ALTERs, so
-			// the schemaVersion bump below stays accurate.
-			const fullyResolvedDrift = new Set<string>()
-
-			for (const entry of entries) {
-				if (entry.status === "wrong_kind") {
-					// An object with the same name exists but as a different kind
-					// (table vs materialized view). Auto-remediating would mean
-					// dropping the customer's existing object — out of scope.
-					skipped.push({
-						name: entry.name,
-						reason: `expected ${entry.kind}, found ${entry.actualKind} — resolve manually`,
-					})
-					continue
-				}
-				if (entry.status === "missing") {
-					const table = desiredByName.get(entry.name)
-					if (!table) continue
-					const stmt = qualifyStatementForDatabase(table.createStatement, config.database)
-					yield* execClickHouse(config, stmt)
-					applied.push(entry.name)
-				} else if (entry.status === "drifted") {
-					// MV bodies aren't fully diffed (presence-only), so a "drifted" entry
-					// always implies kind === "table" today. Defensive guard anyway —
-					// dropping/recreating MVs is destructive and out of scope here.
-					if (entry.kind !== "table") {
-						skipped.push({
-							name: entry.name,
-							reason: `materialized view drift — resolve manually`,
-						})
-						continue
-					}
-					const table = desiredByName.get(entry.name)
-					if (!table) {
-						skipped.push({ name: entry.name, reason: `desired definition missing` })
-						continue
-					}
-
-					const missingDrifts = entry.columnDrifts.filter((d) => d.kind === "missing")
-					const typeMismatches = entry.columnDrifts.filter((d) => d.kind === "type_mismatch")
-					// `extra` drifts (columns the customer has that Maple doesn't expect)
-					// don't block — Maple only reads the columns it owns. Surfaced for
-					// visibility in the diff response, but ignored here.
-
-					const addedColumns: string[] = []
-					const unresolvableAdds: string[] = []
-					yield* Effect.forEach(
-						missingDrifts,
-						(drift) =>
-							Effect.gen(function* () {
-								const colDef = extractColumnDefinition(table.createStatement, drift.column)
-								if (!colDef) {
-									// Shouldn't happen — `missing` drift means the column is in the
-									// desired schema by definition — but guard against parser drift.
-									unresolvableAdds.push(drift.column)
-									return
-								}
-								const alter = `ALTER TABLE \`${config.database}\`.\`${entry.name}\` ADD COLUMN IF NOT EXISTS ${colDef}`
-								yield* execClickHouse(config, alter)
-								addedColumns.push(drift.column)
-							}),
-						{ concurrency: 1, discard: true },
-					)
-
-					const remainingIssues = typeMismatches.length + unresolvableAdds.length
-					if (remainingIssues === 0) {
-						applied.push(entry.name)
-						fullyResolvedDrift.add(entry.name)
-					} else {
-						const parts: string[] = []
-						if (addedColumns.length > 0) {
-							parts.push(
-								`${addedColumns.length} column${addedColumns.length === 1 ? "" : "s"} added`,
-							)
-						}
-						if (typeMismatches.length > 0) {
-							parts.push(
-								`${typeMismatches.length} type mismatch${typeMismatches.length === 1 ? "" : "es"} — resolve manually`,
-							)
-						}
-						if (unresolvableAdds.length > 0) {
-							parts.push(
-								`${unresolvableAdds.length} column${unresolvableAdds.length === 1 ? "" : "s"} unparseable`,
-							)
-						}
-						skipped.push({ name: entry.name, reason: parts.join("; ") })
-					}
-				}
-				// `up_to_date` entries are silently passed over.
+			const existing = yield* database
+				.execute((db) =>
+					db
+						.select()
+						.from(orgClickHouseSchemaApplyRuns)
+						.where(eq(orgClickHouseSchemaApplyRuns.orgId, orgId))
+						.limit(1),
+				)
+				.pipe(Effect.mapError(toPersistenceError))
+			const current = existing[0]
+			if (current && (current.status === "queued" || current.status === "running")) {
+				return new OrgClickHouseApplySchemaStarted({ status: "already_running" })
 			}
 
 			const now = yield* Clock.currentTimeMillis
-			const allSatisfied = entries.every(
-				(e) =>
-					e.status === "up_to_date" ||
-					(e.status === "missing" && applied.includes(e.name)) ||
-					(e.status === "drifted" && fullyResolvedDrift.has(e.name)),
-			)
 			yield* database
 				.execute((db) =>
 					db
-						.update(orgClickHouseSettings)
-						.set({
-							lastSyncAt: now,
-							lastSyncError: null,
-							syncStatus: "connected",
-							schemaVersion: allSatisfied ? clickHouseProjectRevision : row.schemaVersion,
+						.insert(orgClickHouseSchemaApplyRuns)
+						.values({
+							orgId,
+							workflowInstanceId: null,
+							status: "queued",
+							phase: "queued",
+							currentMigration: null,
+							stepsTotal: null,
+							stepsDone: null,
+							appliedVersions: null,
+							skipped: null,
+							errorMessage: null,
+							startedAt: null,
+							finishedAt: null,
+							createdAt: now,
 							updatedAt: now,
-							updatedBy: userId,
 						})
-						.where(eq(orgClickHouseSettings.orgId, orgId)),
+						.onConflictDoUpdate({
+							target: orgClickHouseSchemaApplyRuns.orgId,
+							set: {
+								status: "queued",
+								phase: "queued",
+								currentMigration: null,
+								stepsTotal: null,
+								stepsDone: null,
+								appliedVersions: null,
+								skipped: null,
+								errorMessage: null,
+								startedAt: null,
+								finishedAt: null,
+								updatedAt: now,
+							},
+						}),
 				)
 				.pipe(Effect.mapError(toPersistenceError))
 
-			return new OrgClickHouseApplySchemaResult({ applied, skipped })
+			const binding = Option.match(workerEnv, {
+				onNone: () => undefined,
+				onSome: (e) => e[SCHEMA_APPLY_WORKFLOW_BINDING],
+			})
+			if (!isWorkflowBinding(binding)) {
+				return yield* Effect.fail(
+					new OrgClickHouseSettingsPersistenceError({
+						message: `Schema-apply workflow binding (${SCHEMA_APPLY_WORKFLOW_BINDING}) unavailable`,
+					}),
+				)
+			}
+			yield* Effect.tryPromise({
+				try: () => binding.create({ params: { orgId } }),
+				catch: (error) =>
+					new OrgClickHouseSettingsPersistenceError({
+						message: `Failed to start schema-apply workflow: ${error instanceof Error ? error.message : String(error)}`,
+					}),
+			})
+
+			return new OrgClickHouseApplySchemaStarted({ status: "started" })
+		})
+
+		const applySchemaStatus = Effect.fn("OrgClickHouseSettingsService.applySchemaStatus")(function* (
+			orgId: OrgId,
+			roles: ReadonlyArray<RoleName>,
+		) {
+			yield* Effect.annotateCurrentSpan("orgId", orgId)
+			yield* requireAdmin(roles)
+			const rows = yield* database
+				.execute((db) =>
+					db
+						.select()
+						.from(orgClickHouseSchemaApplyRuns)
+						.where(eq(orgClickHouseSchemaApplyRuns.orgId, orgId))
+						.limit(1),
+				)
+				.pipe(Effect.mapError(toPersistenceError))
+			const row = rows[0]
+			if (!row) {
+				return new OrgClickHouseApplySchemaStatus({
+					status: "idle",
+					phase: null,
+					currentMigration: null,
+					stepsTotal: null,
+					stepsDone: null,
+					appliedVersions: [],
+					errorMessage: null,
+					startedAt: null,
+					finishedAt: null,
+				})
+			}
+			let appliedVersions: ReadonlyArray<number> = []
+			if (row.appliedVersions) {
+				try {
+					const parsed = JSON.parse(row.appliedVersions) as unknown
+					if (Array.isArray(parsed)) appliedVersions = parsed.map((v) => Number(v))
+				} catch {
+					appliedVersions = []
+				}
+			}
+			const status =
+				row.status === "queued" ||
+				row.status === "running" ||
+				row.status === "succeeded" ||
+				row.status === "failed"
+					? row.status
+					: "idle"
+			return new OrgClickHouseApplySchemaStatus({
+				status,
+				phase: row.phase ?? null,
+				currentMigration: row.currentMigration ?? null,
+				stepsTotal: row.stepsTotal ?? null,
+				stepsDone: row.stepsDone ?? null,
+				appliedVersions,
+				errorMessage: row.errorMessage ?? null,
+				startedAt: row.startedAt ?? null,
+				finishedAt: row.finishedAt ?? null,
+			})
 		})
 
 		const resolveRuntimeConfig = Effect.fn("OrgClickHouseSettingsService.resolveRuntimeConfig")(
@@ -962,6 +1014,7 @@ export class OrgClickHouseSettingsService extends Context.Service<
 			delete: deleteSettings,
 			schemaDiff,
 			applySchema,
+			applySchemaStatus,
 			resolveRuntimeConfig,
 			collectorConfig,
 		} satisfies OrgClickHouseSettingsServiceShape
