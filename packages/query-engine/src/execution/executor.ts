@@ -277,7 +277,12 @@ export const makeWarehouseExecutor = (deps: WarehouseExecutorDeps): WarehouseQue
 		if (rows.length === 0) return
 
 		const label = `ingest:${datasource}`
-		const resolved = yield* deps.resolveConfig(tenant, label)
+		// Writes resolve through the ingest-specific resolver when provided: the
+		// host points it at the managed Tinybird pipeline, never a per-org BYO
+		// ClickHouse READ override (routing writes through the override 500'd every
+		// insert and broke demo-seed onboarding). Falls back to the read resolver.
+		const resolveForIngest = deps.resolveIngestConfig ?? deps.resolveConfig
+		const resolved = yield* resolveForIngest(tenant, label)
 
 		// Insert through the same client the read path uses (official
 		// @clickhouse/client-web for ClickHouse, Tinybird Events API for

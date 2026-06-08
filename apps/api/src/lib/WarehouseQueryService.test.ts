@@ -8,6 +8,7 @@ import {
 	UserId,
 } from "@maple/domain/http"
 import { unsafeCompiledQuery } from "@maple/query-engine/ch"
+import { makeWarehouseExecutor } from "@maple/query-engine/execution"
 import { __testables, WarehouseQueryService } from "./WarehouseQueryService"
 import { OrgClickHouseSettingsService } from "../services/OrgClickHouseSettingsService"
 import type { TenantContext } from "../services/AuthService"
@@ -449,6 +450,133 @@ describe("createClickHouseSqlClient.insert wire framing", () => {
 		}
 
 		assert.strictEqual(calls, 0)
+	})
+})
+
+describe("createTinybirdSdkSqlClient.insert wire framing (the production insert path)", () => {
+	// Inserts in the cloud only need to work on Tinybird. This pins that path so a
+	// future change can't silently break ingest into the managed pipeline.
+	const tbConfig = { _tag: "tinybird" as const, host: "https://api.tinybird.co", token: "tok_123" }
+
+	it("POSTs raw ndjson rows to the Tinybird Events API (/v0/events?name=<datasource>)", async () => {
+		const captured: Array<{
+			url: string
+			method?: string
+			contentType?: string
+			auth?: string
+			body: string
+		}> = []
+		const realFetch = globalThis.fetch
+		globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+			const headers = (init?.headers ?? {}) as Record<string, string>
+			captured.push({
+				url: String(input),
+				method: init?.method,
+				contentType: headers["Content-Type"],
+				auth: headers.Authorization,
+				body: typeof init?.body === "string" ? init.body : String(init?.body ?? ""),
+			})
+			return new Response("", { status: 202 })
+		}) as typeof fetch
+
+		try {
+			const client = __testables.createTinybirdSdkSqlClient(tbConfig)
+			await client.insert("traces", [{ trace_id: "a" }, { trace_id: "b" }])
+		} finally {
+			globalThis.fetch = realFetch
+		}
+
+		assert.strictEqual(captured.length, 1)
+		const req = captured[0]!
+		assert.strictEqual(req.method, "POST")
+		assert.isTrue(req.url.startsWith("https://api.tinybird.co/v0/events?name=traces"))
+		assert.strictEqual(req.contentType, "application/x-ndjson")
+		assert.strictEqual(req.auth, "Bearer tok_123")
+		assert.strictEqual(req.body, '{"trace_id":"a"}\n{"trace_id":"b"}')
+		// Tinybird ingests raw rows — never an `INSERT … FORMAT` statement (CH only).
+		assert.isFalse(req.body.includes("INSERT INTO"))
+	})
+
+	it("no-ops on an empty row set (no request issued)", async () => {
+		let calls = 0
+		const realFetch = globalThis.fetch
+		globalThis.fetch = (async () => {
+			calls++
+			return new Response("", { status: 202 })
+		}) as typeof fetch
+
+		try {
+			const client = __testables.createTinybirdSdkSqlClient(tbConfig)
+			await client.insert("traces", [])
+		} finally {
+			globalThis.fetch = realFetch
+		}
+
+		assert.strictEqual(calls, 0)
+	})
+})
+
+describe("ingest routes writes to the managed pipeline, not a per-org read override", () => {
+	const clickhouseReadOverride = {
+		config: {
+			_tag: "clickhouse" as const,
+			url: "https://byo-clickhouse.example.com",
+			username: "u",
+			password: "p",
+			database: "d",
+		},
+		source: "org_override" as const,
+	}
+	const tinybirdManaged = {
+		config: { _tag: "tinybird" as const, host: "https://managed.tinybird.co", token: "tok" },
+		source: "managed" as const,
+	}
+
+	it.effect("ingest uses resolveIngestConfig (Tinybird) while reads use resolveConfig (override)", () => {
+		const used: Array<{ op: "sql" | "insert"; tag: string }> = []
+		const executor = makeWarehouseExecutor({
+			createClient: (config) => ({
+				sql: async () => {
+					used.push({ op: "sql", tag: config._tag })
+					return { data: [] }
+				},
+				insert: async () => {
+					used.push({ op: "insert", tag: config._tag })
+				},
+			}),
+			resolveConfig: () => Effect.succeed(clickhouseReadOverride),
+			resolveIngestConfig: () => Effect.succeed(tinybirdManaged),
+		})
+		const tenant = makeTenant()
+
+		return Effect.gen(function* () {
+			yield* executor.sqlQuery(tenant, "SELECT 1 FROM traces WHERE OrgId = 'org_test'")
+			yield* executor.ingest(tenant, "traces", [{ trace_id: "a" }])
+
+			assert.deepStrictEqual(used, [
+				{ op: "sql", tag: "clickhouse" },
+				{ op: "insert", tag: "tinybird" },
+			])
+		})
+	})
+
+	it.effect("falls back to resolveConfig for ingest when resolveIngestConfig is absent", () => {
+		const used: Array<{ op: "insert"; tag: string }> = []
+		const executor = makeWarehouseExecutor({
+			createClient: (config) => ({
+				sql: async () => ({ data: [] }),
+				insert: async () => {
+					used.push({ op: "insert", tag: config._tag })
+				},
+			}),
+			resolveConfig: () => Effect.succeed(tinybirdManaged),
+		})
+		const tenant = makeTenant()
+
+		return Effect.gen(function* () {
+			yield* executor.ingest(tenant, "traces", [{ trace_id: "a" }])
+			assert.deepStrictEqual(used, [{ op: "insert", tag: "tinybird" }])
+		})
 	})
 })
 

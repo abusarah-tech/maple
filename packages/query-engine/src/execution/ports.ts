@@ -67,6 +67,19 @@ export interface WarehouseExecutorDeps {
 		{ readonly config: ResolvedWarehouseConfig; readonly source: "managed" | "org_override" },
 		WarehouseQueryError
 	>
+	/**
+	 * Config resolver for the WRITE path (`ingest`). Inserts must land in the
+	 * managed pipeline (Tinybird in the cloud), NOT a per-org BYO ClickHouse
+	 * read override — that override is a query-side concern. Falls back to
+	 * `resolveConfig` when omitted.
+	 */
+	readonly resolveIngestConfig?: (
+		tenant: ExecutionTenant,
+		label: string,
+	) => Effect.Effect<
+		{ readonly config: ResolvedWarehouseConfig; readonly source: "managed" | "org_override" },
+		WarehouseQueryError
+	>
 }
 
 export interface WarehouseQueryServiceShape {
