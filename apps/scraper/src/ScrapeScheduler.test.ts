@@ -19,6 +19,7 @@ const mkTarget = (
 		url: string
 		labels: Record<string, string>
 		ingestKey: string
+		subTargetKey: string | null
 	}> = {},
 ): InternalScrapeTarget =>
 	decodeTarget({
@@ -27,6 +28,7 @@ const mkTarget = (
 		name: overrides.name ?? `target-${id.slice(0, 4)}`,
 		serviceName: overrides.serviceName ?? null,
 		url: overrides.url ?? "https://example.com/metrics",
+		subTargetKey: overrides.subTargetKey ?? null,
 		scrapeIntervalSeconds: intervalSeconds,
 		labels: overrides.labels ?? {},
 		ingestKey: overrides.ingestKey ?? `maple_pk_${id.slice(0, 4)}`,
@@ -50,6 +52,8 @@ interface Harness {
 	/** Mutable target list returned by the stubbed listTargets. */
 	targets: Array<InternalScrapeTarget>
 	scrapeCalls: Array<string>
+	/** `(targetId, subTargetKey)` pairs as seen by the scrape proxy stub. */
+	subCalls: Array<{ targetId: string; subTargetKey: string | null }>
 	ingestCalls: Array<{ ingestKey: string; request: OtlpExportRequest }>
 	reportedResults: Array<ScrapeResultReport>
 	/** Per-target scrape behaviour override. */
@@ -60,6 +64,7 @@ interface Harness {
 const makeHarness = (targets: Array<InternalScrapeTarget>): Harness => ({
 	targets,
 	scrapeCalls: [],
+	subCalls: [],
 	ingestCalls: [],
 	reportedResults: [],
 	scrapeImpl: () => Effect.succeed({ status: 200, body: GAUGE_BODY }),
@@ -69,9 +74,10 @@ const makeHarness = (targets: Array<InternalScrapeTarget>): Harness => ({
 const harnessLayer = (harness: Harness, env: ScraperEnvShape = testEnv) => {
 	const api: ApiClientShape = {
 		listTargets: () => Effect.sync(() => [...harness.targets]),
-		scrapeTarget: (targetId) =>
+		scrapeTarget: (targetId, subTargetKey) =>
 			Effect.suspend(() => {
 				harness.scrapeCalls.push(targetId)
+				harness.subCalls.push({ targetId, subTargetKey: subTargetKey ?? null })
 				return harness.scrapeImpl(targetId)
 			}),
 		reportResults: (results) =>
@@ -176,6 +182,45 @@ describe("ScrapeScheduler", () => {
 		}),
 	)
 
+	it.effect("reports check metadata (duration + sample counts) with each result", () =>
+		Effect.gen(function* () {
+			const harness = makeHarness([mkTarget(TARGET_A, 60)])
+			// Scrape takes 2s of (test) wall-clock before responding.
+			harness.scrapeImpl = () =>
+				Effect.sleep(Duration.seconds(2)).pipe(
+					Effect.as<ScrapeProxyResponse>({ status: 200, body: GAUGE_BODY }),
+				)
+			yield* startScheduler.pipe(Effect.provide(harnessLayer(harness)))
+
+			yield* TestClock.adjust(Duration.seconds(10))
+
+			expect(harness.reportedResults).toHaveLength(1)
+			const report = harness.reportedResults[0]!
+			expect(report.error).toBeNull()
+			expect(report.durationMs).toBe(2000)
+			// GAUGE_BODY exposes a single `up 1` sample → one gauge data point.
+			expect(report.samplesScraped).toBe(1)
+			expect(report.samplesPostMetricRelabeling).toBe(1)
+		}),
+	)
+
+	it.effect("reports duration but no sample counts for failed scrapes", () =>
+		Effect.gen(function* () {
+			const harness = makeHarness([mkTarget(TARGET_A, 60)])
+			harness.scrapeImpl = () => Effect.succeed({ status: 503, body: "unavailable" })
+			yield* startScheduler.pipe(Effect.provide(harnessLayer(harness)))
+
+			yield* TestClock.adjust(Duration.seconds(10))
+
+			expect(harness.reportedResults).toHaveLength(1)
+			const report = harness.reportedResults[0]!
+			expect(report.error).toContain("HTTP 503")
+			expect(report.durationMs).toBe(0)
+			expect(report.samplesScraped).toBeUndefined()
+			expect(report.samplesPostMetricRelabeling).toBeUndefined()
+		}),
+	)
+
 	it.effect("treats a gateway rejection (e.g. billing 402) as a scrape failure", () =>
 		Effect.gen(function* () {
 			const harness = makeHarness([mkTarget(TARGET_A, 60)])
@@ -217,6 +262,43 @@ describe("ScrapeScheduler", () => {
 			const aResults = harness.reportedResults.filter((r) => r.targetId === TARGET_A)
 			expect(aResults.length).toBeGreaterThan(0)
 			expect(aResults[0]?.error).toContain("boom")
+		}),
+	)
+
+	it.effect("runs discovered sub-targets sharing one id as independent loops", () =>
+		Effect.gen(function* () {
+			const harness = makeHarness([
+				mkTarget(TARGET_A, 10, { subTargetKey: "branch-1", url: "https://b1.example.com/metrics" }),
+				mkTarget(TARGET_A, 10, { subTargetKey: "branch-2", url: "https://b2.example.com/metrics" }),
+			])
+			yield* startScheduler.pipe(Effect.provide(harnessLayer(harness)))
+
+			yield* TestClock.adjust(Duration.seconds(30))
+
+			const branch1 = harness.subCalls.filter((c) => c.subTargetKey === "branch-1").length
+			const branch2 = harness.subCalls.filter((c) => c.subTargetKey === "branch-2").length
+			expect(branch1).toBeGreaterThanOrEqual(3)
+			expect(branch2).toBeGreaterThanOrEqual(3)
+
+			// Result reports carry the sub-target key for branch-level attribution.
+			const reportedKeys = new Set(harness.reportedResults.map((r) => r.subTargetKey))
+			expect(reportedKeys.has("branch-1")).toBe(true)
+			expect(reportedKeys.has("branch-2")).toBe(true)
+
+			// Discovery drops branch-2 → only its loop is interrupted.
+			harness.targets = [
+				mkTarget(TARGET_A, 10, { subTargetKey: "branch-1", url: "https://b1.example.com/metrics" }),
+			]
+			yield* TestClock.adjust(Duration.seconds(60))
+			const branch2AfterRemoval = harness.subCalls.filter((c) => c.subTargetKey === "branch-2").length
+			yield* TestClock.adjust(Duration.seconds(30))
+
+			expect(harness.subCalls.filter((c) => c.subTargetKey === "branch-2").length).toBe(
+				branch2AfterRemoval,
+			)
+			expect(harness.subCalls.filter((c) => c.subTargetKey === "branch-1").length).toBeGreaterThan(
+				branch1,
+			)
 		}),
 	)
 

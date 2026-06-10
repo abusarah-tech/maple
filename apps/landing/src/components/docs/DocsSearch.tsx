@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { SearchDoc } from "../../lib/docs-search"
 
 /** Flat browse order — mirrors the sidebar group order (DocsSidebar.astro). */
-const GROUP_ORDER = ["Getting Started", "Concepts", "Infrastructure", "Local Mode", "Effect SDK", "Platforms", "Instrumentation"]
+const GROUP_ORDER = ["Getting Started", "Concepts", "Infrastructure", "Integrations", "Local Mode", "Effect SDK", "Platforms", "Instrumentation"]
 
 const MAX_RESULTS = 8
 

@@ -10,6 +10,7 @@ import type {
 	ScrapeTargetChecksListResponse,
 	ScrapeTargetId,
 	ScrapeTargetResponse,
+	ScrapeTargetType,
 } from "@maple/domain/http"
 import { useState, type KeyboardEvent, type ReactNode } from "react"
 import { Exit, Schema } from "effect"
@@ -60,6 +61,7 @@ import {
 	HistoryIcon,
 	LoaderIcon,
 	PencilIcon,
+	PlanetScaleIcon,
 	PlusIcon,
 	PulseIcon,
 	TrashIcon,
@@ -75,6 +77,7 @@ const AUTH_TYPE_LABELS: Record<ScrapeAuthType, string> = {
 	none: "None",
 	bearer: "Bearer Token",
 	basic: "Basic Auth",
+	token: "Service Token",
 }
 
 const asScrapeIntervalSeconds = Schema.decodeUnknownSync(ScrapeIntervalSeconds)
@@ -171,7 +174,41 @@ function scheduledStatus(
 	}
 }
 
-export function ScrapeTargetsSection() {
+interface SourceCopy {
+	readonly description: string
+	readonly emptyTitle: string
+	readonly emptyDescription: string
+}
+
+const SOURCE_COPY: Record<"all" | ScrapeTargetType, SourceCopy> = {
+	all: {
+		description: "Scrape Prometheus exporters and inspect scheduled scrape health.",
+		emptyTitle: "No scrape targets",
+		emptyDescription: "Add a Prometheus exporter endpoint to start scraping metrics.",
+	},
+	prometheus: {
+		description: "Scrape Prometheus exporters and inspect scheduled scrape health.",
+		emptyTitle: "No scrape targets",
+		emptyDescription: "Add a Prometheus exporter endpoint to start scraping metrics.",
+	},
+	planetscale: {
+		description:
+			"Connect PlanetScale organizations — Maple discovers and scrapes every database branch automatically.",
+		emptyTitle: "No PlanetScale organizations",
+		emptyDescription:
+			"Connect an organization with a service token to start scraping branch metrics.",
+	},
+}
+
+export function ScrapeTargetsSection({
+	sourceFilter,
+}: {
+	/**
+	 * Scope this section to one target type (Integrations hub drill-ins):
+	 * filters the list, presets the add dialog, and hides the source selector.
+	 */
+	sourceFilter?: ScrapeTargetType
+} = {}) {
 	const [dialogOpen, setDialogOpen] = useState(false)
 	const [isSaving, setIsSaving] = useState(false)
 	const [togglingId, setTogglingId] = useState<ScrapeTargetId | null>(null)
@@ -180,9 +217,13 @@ export function ScrapeTargetsSection() {
 	const [selectedTargetId, setSelectedTargetId] = useState<ScrapeTargetId | null>(null)
 
 	const [editingTarget, setEditingTarget] = useState<ScrapeTarget | null>(null)
+	const [formTargetType, setFormTargetType] = useState<ScrapeTargetType>("prometheus")
 	const [formName, setFormName] = useState("")
 	const [formServiceName, setFormServiceName] = useState("")
 	const [formUrl, setFormUrl] = useState("")
+	const [formOrganization, setFormOrganization] = useState("")
+	const [formTokenId, setFormTokenId] = useState("")
+	const [formTokenSecret, setFormTokenSecret] = useState("")
 	const [formInterval, setFormInterval] = useState("15")
 	const [formAuthType, setFormAuthType] = useState<ScrapeAuthType>("none")
 	const [formAuthToken, setFormAuthToken] = useState("")
@@ -209,7 +250,9 @@ export function ScrapeTargetsSection() {
 	const targets = Result.builder(listResult)
 		.onSuccess((response) => [...response.targets] as ScrapeTarget[])
 		.orElse(() => [])
+		.filter((target) => !sourceFilter || target.targetType === sourceFilter)
 	const selectedTarget = targets.find((target) => target.id === selectedTargetId) ?? null
+	const copy = SOURCE_COPY[sourceFilter ?? "all"]
 
 	async function handleProbe(target: ScrapeTarget) {
 		setProbingId(target.id)
@@ -228,11 +271,16 @@ export function ScrapeTargetsSection() {
 	}
 
 	function openAddDialog() {
+		const targetType = sourceFilter ?? "prometheus"
 		setEditingTarget(null)
+		setFormTargetType(targetType)
 		setFormName("")
 		setFormServiceName("")
 		setFormUrl("")
-		setFormInterval("15")
+		setFormOrganization("")
+		setFormTokenId("")
+		setFormTokenSecret("")
+		setFormInterval(targetType === "planetscale" ? "30" : "15")
 		setFormAuthType("none")
 		setFormAuthToken("")
 		setFormAuthUsername("")
@@ -242,9 +290,13 @@ export function ScrapeTargetsSection() {
 
 	function openEditDialog(target: ScrapeTarget) {
 		setEditingTarget(target)
+		setFormTargetType(target.targetType)
 		setFormName(target.name)
 		setFormServiceName(target.serviceName ?? "")
 		setFormUrl(target.url)
+		setFormOrganization(target.organization ?? "")
+		setFormTokenId("")
+		setFormTokenSecret("")
 		setFormInterval(String(target.scrapeIntervalSeconds))
 		setFormAuthType(target.authType)
 		setFormAuthToken("")
@@ -253,7 +305,19 @@ export function ScrapeTargetsSection() {
 		setDialogOpen(true)
 	}
 
+	function selectTargetType(type: ScrapeTargetType) {
+		setFormTargetType(type)
+		setFormInterval(type === "planetscale" ? "30" : "15")
+	}
+
 	function buildAuthCredentials(): string | null {
+		if (formTargetType === "planetscale") {
+			if (!formTokenId.trim() || !formTokenSecret.trim()) return null
+			return JSON.stringify({
+				tokenId: formTokenId.trim(),
+				tokenSecret: formTokenSecret.trim(),
+			})
+		}
 		if (formAuthType === "bearer") {
 			if (!formAuthToken.trim()) return null
 			return JSON.stringify({ token: formAuthToken.trim() })
@@ -269,31 +333,46 @@ export function ScrapeTargetsSection() {
 	}
 
 	async function handleSave() {
-		if (!formName.trim() || !formUrl.trim()) {
-			toast.error("Name and URL are required")
+		const isPlanetScale = formTargetType === "planetscale"
+		if (!formName.trim() || (isPlanetScale ? !formOrganization.trim() : !formUrl.trim())) {
+			toast.error(isPlanetScale ? "Name and organization are required" : "Name and URL are required")
 			return
 		}
 
 		let parsedInterval: ScrapeIntervalSeconds
 		try {
-			parsedInterval = asScrapeIntervalSeconds(Number.parseInt(formInterval, 10) || 15)
+			parsedInterval = asScrapeIntervalSeconds(
+				Number.parseInt(formInterval, 10) || (isPlanetScale ? 30 : 15),
+			)
 		} catch {
 			toast.error("Scrape interval must be an integer from 5 to 300 seconds")
 			return
 		}
 
-		setIsSaving(true)
 		const authCredentials = buildAuthCredentials()
+		if (isPlanetScale && !editingTarget && authCredentials === null) {
+			toast.error("Service token ID and secret are required")
+			return
+		}
+
+		setIsSaving(true)
 
 		if (editingTarget) {
 			const result = await updateMutation({
 				params: { targetId: editingTarget.id },
 				payload: new UpdateScrapeTargetRequest({
 					name: formName.trim(),
-					url: formUrl.trim(),
 					scrapeIntervalSeconds: parsedInterval,
 					serviceName: formServiceName.trim() || null,
-					authType: formAuthType,
+					...(isPlanetScale
+						? {
+								organization: formOrganization.trim(),
+								authType: "token" as const,
+							}
+						: {
+								url: formUrl.trim(),
+								authType: formAuthType,
+							}),
 					...(authCredentials !== null ? { authCredentials } : {}),
 				}),
 			})
@@ -308,10 +387,18 @@ export function ScrapeTargetsSection() {
 			const result = await createMutation({
 				payload: new CreateScrapeTargetRequest({
 					name: formName.trim(),
-					url: formUrl.trim(),
 					scrapeIntervalSeconds: parsedInterval,
 					serviceName: formServiceName.trim() || null,
-					authType: formAuthType,
+					...(isPlanetScale
+						? {
+								targetType: "planetscale" as const,
+								organization: formOrganization.trim(),
+								authType: "token" as const,
+							}
+						: {
+								url: formUrl.trim(),
+								authType: formAuthType,
+							}),
 					...(authCredentials !== null ? { authCredentials } : {}),
 				}),
 			})
@@ -359,9 +446,7 @@ export function ScrapeTargetsSection() {
 		<>
 			<div className="space-y-4">
 				<div className="flex items-center justify-between gap-3">
-					<p className="text-muted-foreground text-sm">
-						Scrape Prometheus exporters and inspect scheduled scrape health.
-					</p>
+					<p className="text-muted-foreground text-sm">{copy.description}</p>
 					<Button size="sm" className="shrink-0" onClick={openAddDialog}>
 						<PlusIcon size={14} />
 						Add Target
@@ -382,12 +467,14 @@ export function ScrapeTargetsSection() {
 					<Empty className="py-12">
 						<EmptyHeader>
 							<EmptyMedia variant="icon">
-								<FireIcon size={16} />
+								{sourceFilter === "planetscale" ? (
+									<PlanetScaleIcon size={16} />
+								) : (
+									<FireIcon size={16} />
+								)}
 							</EmptyMedia>
-							<EmptyTitle>No scrape targets</EmptyTitle>
-							<EmptyDescription>
-								Add a Prometheus exporter endpoint to start scraping metrics.
-							</EmptyDescription>
+							<EmptyTitle>{copy.emptyTitle}</EmptyTitle>
+							<EmptyDescription>{copy.emptyDescription}</EmptyDescription>
 						</EmptyHeader>
 						<Button size="sm" onClick={openAddDialog}>
 							<PlusIcon size={14} />
@@ -404,6 +491,7 @@ export function ScrapeTargetsSection() {
 									selected={target.id === selectedTarget?.id}
 									toggling={togglingId === target.id}
 									probing={probingId === target.id}
+									hideTypeBadge={sourceFilter === "planetscale"}
 									onSelect={setSelectedTargetId}
 									onProbe={handleProbe}
 									onToggle={handleToggleEnabled}
@@ -443,10 +531,32 @@ export function ScrapeTargetsSection() {
 						<DialogDescription>
 							{editingTarget
 								? "Update the scrape target configuration."
-								: "Enter the URL of a Prometheus exporter endpoint. Maple will periodically scrape this endpoint for metrics."}
+								: formTargetType === "planetscale"
+									? "Connect a PlanetScale organization. Maple discovers every database branch's metrics endpoint and scrapes them automatically."
+									: "Enter the URL of a Prometheus exporter endpoint. Maple will periodically scrape this endpoint for metrics."}
 						</DialogDescription>
 					</DialogHeader>
 					<div className="space-y-4 px-6 py-2">
+						{!editingTarget && !sourceFilter && (
+							<div className="space-y-2">
+								<Label>Source</Label>
+								<Select
+									items={{ prometheus: "Prometheus endpoint", planetscale: "PlanetScale" }}
+									value={formTargetType}
+									onValueChange={(val: string | null) =>
+										selectTargetType((val as ScrapeTargetType | null) ?? "prometheus")
+									}
+								>
+									<SelectTrigger className="w-full">
+										<SelectValue placeholder="Select source" />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="prometheus">Prometheus endpoint</SelectItem>
+										<SelectItem value="planetscale">PlanetScale</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
+						)}
 						<div className="space-y-2">
 							<Label htmlFor="scrape-name">Name</Label>
 							<Input
@@ -469,15 +579,64 @@ export function ScrapeTargetsSection() {
 								empty.
 							</p>
 						</div>
-						<div className="space-y-2">
-							<Label htmlFor="scrape-url">URL</Label>
-							<Input
-								id="scrape-url"
-								placeholder="e.g. https://myapp.com:9090/metrics"
-								value={formUrl}
-								onChange={(e) => setFormUrl(e.target.value)}
-							/>
-						</div>
+						{formTargetType === "prometheus" ? (
+							<div className="space-y-2">
+								<Label htmlFor="scrape-url">URL</Label>
+								<Input
+									id="scrape-url"
+									placeholder="e.g. https://myapp.com:9090/metrics"
+									value={formUrl}
+									onChange={(e) => setFormUrl(e.target.value)}
+								/>
+							</div>
+						) : (
+							<>
+								<div className="space-y-2">
+									<Label htmlFor="scrape-org">Organization</Label>
+									<Input
+										id="scrape-org"
+										placeholder="e.g. my-planetscale-org"
+										value={formOrganization}
+										onChange={(e) => setFormOrganization(e.target.value)}
+									/>
+									<p className="text-muted-foreground text-xs">
+										Your PlanetScale organization name as it appears in the dashboard URL.
+									</p>
+								</div>
+								<div className="space-y-2">
+									<Label htmlFor="scrape-token-id">Service Token ID</Label>
+									<Input
+										id="scrape-token-id"
+										placeholder={
+											editingTarget?.hasCredentials
+												? "Leave blank to keep existing"
+												: "Enter service token ID"
+										}
+										value={formTokenId}
+										onChange={(e) => setFormTokenId(e.target.value)}
+									/>
+								</div>
+								<div className="space-y-2">
+									<Label htmlFor="scrape-token-secret">Service Token Secret</Label>
+									<Input
+										id="scrape-token-secret"
+										type="password"
+										placeholder={
+											editingTarget?.hasCredentials
+												? "Leave blank to keep existing"
+												: "Enter service token secret"
+										}
+										value={formTokenSecret}
+										onChange={(e) => setFormTokenSecret(e.target.value)}
+									/>
+									<p className="text-muted-foreground text-xs">
+										Create a service token with the{" "}
+										<span className="font-mono">read_metrics_endpoints</span> organization
+										permission.
+									</p>
+								</div>
+							</>
+						)}
 						<div className="space-y-2">
 							<Label htmlFor="scrape-interval">Scrape Interval (seconds)</Label>
 							<Input
@@ -489,6 +648,7 @@ export function ScrapeTargetsSection() {
 								onChange={(e) => setFormInterval(e.target.value)}
 							/>
 						</div>
+						{formTargetType === "prometheus" && (
 						<div className="space-y-2">
 							<Label>Authentication</Label>
 							<Select
@@ -511,7 +671,8 @@ export function ScrapeTargetsSection() {
 								</SelectContent>
 							</Select>
 						</div>
-						{formAuthType === "bearer" && (
+						)}
+						{formTargetType === "prometheus" && formAuthType === "bearer" && (
 							<div className="space-y-2">
 								<Label htmlFor="scrape-auth-token">Bearer Token</Label>
 								<Input
@@ -527,7 +688,7 @@ export function ScrapeTargetsSection() {
 								/>
 							</div>
 						)}
-						{formAuthType === "basic" && (
+						{formTargetType === "prometheus" && formAuthType === "basic" && (
 							<>
 								<div className="space-y-2">
 									<Label htmlFor="scrape-auth-username">Username</Label>
@@ -620,6 +781,7 @@ function ScrapeTargetRow({
 	selected,
 	toggling,
 	probing,
+	hideTypeBadge,
 	onSelect,
 	onProbe,
 	onToggle,
@@ -630,6 +792,8 @@ function ScrapeTargetRow({
 	selected: boolean
 	toggling: boolean
 	probing: boolean
+	/** The PlanetScale drill-in shows only planetscale targets — the badge is noise there. */
+	hideTypeBadge?: boolean
 	onSelect: (targetId: ScrapeTargetId) => void
 	onProbe: (target: ScrapeTarget) => void
 	onToggle: (target: ScrapeTarget) => void
@@ -673,6 +837,11 @@ function ScrapeTargetRow({
 					<Badge variant={status.badgeVariant} className="shrink-0">
 						{status.label}
 					</Badge>
+					{target.targetType === "planetscale" && !hideTypeBadge && (
+						<Badge variant="outline" className="shrink-0">
+							PlanetScale
+						</Badge>
+					)}
 					{target.serviceName && (
 						<Badge variant="outline" className="shrink-0">
 							{target.serviceName}
@@ -685,10 +854,14 @@ function ScrapeTargetRow({
 					)}
 				</div>
 				<div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-					<span className="max-w-[280px] truncate font-mono">{hostnameFromUrl(target.url)}</span>
+					<span className="max-w-[280px] truncate font-mono">
+						{target.targetType === "planetscale"
+							? (target.organization ?? hostnameFromUrl(target.url))
+							: hostnameFromUrl(target.url)}
+					</span>
 					<span>{target.scrapeIntervalSeconds}s interval</span>
 					<span>{status.detail}</span>
-					{target.lastScrapeAt && <span>Manual test {formatRelativeTime(target.lastScrapeAt)}</span>}
+					{target.lastScrapeAt && <span>Last scrape {formatRelativeTime(target.lastScrapeAt)}</span>}
 				</div>
 				{latestCheck?.message && !latestCheck.success && (
 					<div className="mt-1.5 flex items-center gap-1.5 text-xs text-destructive">
@@ -699,7 +872,7 @@ function ScrapeTargetRow({
 				{target.lastScrapeError && (
 					<div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
 						<CircleInfoIcon size={12} className="shrink-0" />
-						<span className="truncate">Manual test: {target.lastScrapeError}</span>
+						<span className="truncate">Last scrape: {target.lastScrapeError}</span>
 					</div>
 				)}
 			</div>
@@ -852,7 +1025,11 @@ function ScrapeTargetDetails({
 					</div>
 					<div className="divide-y rounded-md border bg-background/35 text-xs">
 						<DetailRow label="Service" value={target.serviceName ?? target.name} />
-						<DetailRow label="Instance" value={hostnameFromUrl(target.url)} />
+						{target.targetType === "planetscale" ? (
+							<DetailRow label="Organization" value={target.organization ?? "-"} />
+						) : (
+							<DetailRow label="Instance" value={hostnameFromUrl(target.url)} />
+						)}
 						<DetailRow label="Auth" value={AUTH_TYPE_LABELS[target.authType] ?? target.authType} />
 						<DetailRow label="Target ID" value={<span className="font-mono">{target.id}</span>} />
 						<DetailRow label="Created" value={formatDateTime(target.createdAt)} />
@@ -944,7 +1121,7 @@ function ChecksTable({ result, checks }: { result: ScrapeTargetChecksResult; che
 			<div className="divide-y">
 				{checks.map((check) => (
 					<div
-						key={`${check.timestamp}-${check.up}`}
+						key={`${check.timestamp}-${check.subTargetKey ?? ""}`}
 						className="grid grid-cols-[minmax(100px,1fr)_64px_70px_72px] items-center gap-2 px-3 py-2 text-xs"
 					>
 						<div className="min-w-0">

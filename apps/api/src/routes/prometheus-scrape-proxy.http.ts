@@ -7,9 +7,13 @@ import { isValidInternalBearer } from "../lib/internal-auth"
 
 const decodeScrapeTargetIdEffect = Schema.decodeUnknownEffect(ScrapeTargetId)
 
-const targetIdFromRequest = (req: HttpServerRequest.HttpServerRequest) => {
+const queryParamsFromRequest = (req: HttpServerRequest.HttpServerRequest) => {
 	const url = new URL(req.url, "http://internal")
-	return url.searchParams.get("targetId")
+	return {
+		targetId: url.searchParams.get("targetId"),
+		// Sub-target discriminator for discovered targets (PlanetScale branches).
+		sub: url.searchParams.get("sub") ?? undefined,
+	}
 }
 
 const errorText = (message: string, status: number) =>
@@ -54,7 +58,7 @@ export const PrometheusScrapeProxyRouter = HttpRouter.use((router) =>
 					return errorText("Unauthorized", 401)
 				}
 
-				const rawTargetId = targetIdFromRequest(req)
+				const { targetId: rawTargetId, sub } = queryParamsFromRequest(req)
 				if (!rawTargetId) {
 					return errorText("Missing targetId", 400)
 				}
@@ -64,7 +68,7 @@ export const PrometheusScrapeProxyRouter = HttpRouter.use((router) =>
 					return errorText("Invalid targetId", 400)
 				}
 
-				return yield* service.scrapeForCollector(targetId.value).pipe(
+				return yield* service.scrapeForCollector(targetId.value, sub).pipe(
 					Effect.flatMap((response) =>
 						Effect.succeed(
 							HttpServerResponse.text(response.body, {

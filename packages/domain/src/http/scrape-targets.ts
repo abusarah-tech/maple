@@ -1,14 +1,22 @@
 import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import { Schema } from "effect"
-import { IsoDateTimeString, ScrapeAuthType, ScrapeIntervalSeconds, ScrapeTargetId } from "../primitives"
+import {
+	IsoDateTimeString,
+	ScrapeAuthType,
+	ScrapeIntervalSeconds,
+	ScrapeTargetId,
+	ScrapeTargetType,
+} from "../primitives"
 import { Authorization } from "./current-tenant"
-import { warehouseHttpErrors } from "./warehouse-errors"
 
 export class ScrapeTargetResponse extends Schema.Class<ScrapeTargetResponse>("ScrapeTargetResponse")({
 	id: ScrapeTargetId,
 	name: Schema.String,
 	serviceName: Schema.NullOr(Schema.String),
 	url: Schema.String,
+	targetType: ScrapeTargetType,
+	/** PlanetScale organization name; `null` for plain Prometheus targets. */
+	organization: Schema.NullOr(Schema.String),
 	scrapeIntervalSeconds: ScrapeIntervalSeconds,
 	labelsJson: Schema.NullOr(Schema.String),
 	authType: ScrapeAuthType,
@@ -30,7 +38,11 @@ export class CreateScrapeTargetRequest extends Schema.Class<CreateScrapeTargetRe
 	"CreateScrapeTargetRequest",
 )({
 	name: Schema.String,
-	url: Schema.String,
+	/** Required for `prometheus` targets; rejected for `planetscale` (derived server-side). */
+	url: Schema.optionalKey(Schema.NullOr(Schema.String)),
+	targetType: Schema.optionalKey(ScrapeTargetType),
+	/** Required for `planetscale` targets. */
+	organization: Schema.optionalKey(Schema.NullOr(Schema.String)),
 	scrapeIntervalSeconds: Schema.optionalKey(ScrapeIntervalSeconds),
 	labelsJson: Schema.optionalKey(Schema.NullOr(Schema.String)),
 	authType: Schema.optionalKey(ScrapeAuthType),
@@ -44,6 +56,8 @@ export class UpdateScrapeTargetRequest extends Schema.Class<UpdateScrapeTargetRe
 )({
 	name: Schema.optionalKey(Schema.String),
 	url: Schema.optionalKey(Schema.String),
+	/** PlanetScale targets only — updates the organization and re-derives the SD url. */
+	organization: Schema.optionalKey(Schema.NullOr(Schema.String)),
 	scrapeIntervalSeconds: Schema.optionalKey(ScrapeIntervalSeconds),
 	labelsJson: Schema.optionalKey(Schema.NullOr(Schema.String)),
 	authType: Schema.optionalKey(ScrapeAuthType),
@@ -66,19 +80,21 @@ export class ScrapeTargetProbeResponse extends Schema.Class<ScrapeTargetProbeRes
 	lastScrapeError: Schema.NullOr(Schema.String),
 }) {}
 
+/**
+ * One persisted scheduled-scrape attempt (a `scrape_target_checks` row),
+ * reported by the scraper and stored by the API.
+ */
 export class ScrapeTargetCheckResponse extends Schema.Class<ScrapeTargetCheckResponse>(
 	"ScrapeTargetCheckResponse",
 )({
 	timestamp: IsoDateTimeString,
 	success: Schema.Boolean,
-	up: Schema.Number,
+	/** Sub-target discriminator (e.g. PlanetScale branch); null for plain targets. */
+	subTargetKey: Schema.NullOr(Schema.String),
 	durationSeconds: Schema.NullOr(Schema.Number),
 	samplesScraped: Schema.NullOr(Schema.Number),
 	samplesPostMetricRelabeling: Schema.NullOr(Schema.Number),
-	seriesAdded: Schema.NullOr(Schema.Number),
-	serviceName: Schema.String,
-	job: Schema.String,
-	instance: Schema.String,
+	/** Null on success; the scrape failure message otherwise. */
 	message: Schema.NullOr(Schema.String),
 }) {}
 
@@ -183,7 +199,7 @@ export class ScrapeTargetsApiGroup extends HttpApiGroup.make("scrapeTargets")
 			},
 			query: ListScrapeTargetChecksQuery,
 			success: ScrapeTargetChecksListResponse,
-			error: [ScrapeTargetNotFoundError, ScrapeTargetPersistenceError, ...warehouseHttpErrors],
+			error: [ScrapeTargetNotFoundError, ScrapeTargetPersistenceError],
 		}),
 	)
 	.prefix("/api/scrape-targets")

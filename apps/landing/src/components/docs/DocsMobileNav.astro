@@ -37,7 +37,7 @@ const orderGroups = (groups: Map<string, typeof allDocs>, groupOrder: string[]) 
     });
 
 const sdkGroups = orderGroups(groupBy(sdkScopedDocs), ["Effect SDK", "Platforms", "Instrumentation"]);
-const universalGroups = orderGroups(groupBy(universalDocs), ["Getting Started", "Concepts", "Infrastructure"]);
+const universalGroups = orderGroups(groupBy(universalDocs), ["Getting Started", "Concepts", "Infrastructure", "Integrations"]);
 ---
 
 <details class="lg:hidden mb-6 border border-border">

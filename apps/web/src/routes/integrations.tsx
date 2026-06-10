@@ -1,0 +1,141 @@
+import { useNavigate, createFileRoute } from "@tanstack/react-router"
+import { effectRoute } from "@effect-router/core"
+import { Schema } from "effect"
+
+import { DashboardLayout } from "@/components/layout/dashboard-layout"
+import { HazelIntegrationCard } from "@/components/integrations/hazel-integration-card"
+import {
+	IntegrationCatalog,
+	IntegrationIconPlate,
+	catalogEntry,
+	useIntegrationStatuses,
+	type IntegrationId,
+} from "@/components/integrations/integration-catalog"
+import { CloudflareLogpushSection } from "@/components/settings/cloudflare-logpush-section"
+import { ScrapeTargetsSection } from "@/components/settings/scrape-targets-section"
+import {
+	SettingsNav,
+	useVisibleSettingsSections,
+} from "@/components/settings/settings-nav"
+import { Badge } from "@maple/ui/components/ui/badge"
+import { Button } from "@maple/ui/components/ui/button"
+import { ArrowLeftIcon, ExternalLinkIcon } from "@/components/icons"
+
+const IntegrationsSearch = Schema.Struct({
+	integration: Schema.optional(
+		Schema.Literals(["cloudflare", "prometheus", "planetscale", "warpstream", "hazel"]),
+	),
+})
+
+export const Route = effectRoute(createFileRoute("/integrations"))({
+	component: IntegrationsPage,
+	validateSearch: Schema.toStandardSchemaV1(IntegrationsSearch),
+})
+
+function IntegrationsPage() {
+	const search = Route.useSearch()
+	const navigate = useNavigate({ from: Route.fullPath })
+	const { visibleSections } = useVisibleSettingsSections()
+	const integration = search.integration
+
+	// The hub shares the settings shell: same sidebar, "Integrations" highlighted.
+	const settingsSidebar = (
+		<SettingsNav
+			sections={visibleSections}
+			active="integrations"
+			onSelectTab={(tab) => navigate({ to: "/settings", search: { tab } })}
+		/>
+	)
+
+	if (!integration) {
+		return (
+			<DashboardLayout
+				breadcrumbs={[{ label: "Settings", href: "/settings" }, { label: "Integrations" }]}
+				title="Integrations"
+				description="Connect external data sources and services to Maple."
+				filterSidebar={settingsSidebar}
+			>
+				<IntegrationCatalog
+					onSelect={(id) => navigate({ search: { integration: id } })}
+				/>
+			</DashboardLayout>
+		)
+	}
+
+	const entry = catalogEntry(integration)
+
+	return (
+		<DashboardLayout
+			breadcrumbs={[
+				{ label: "Settings", href: "/settings" },
+				{ label: "Integrations", href: "/integrations" },
+				{ label: entry.name },
+			]}
+			titleContent={<IntegrationHeader integration={integration} />}
+			filterSidebar={settingsSidebar}
+		>
+			<div className="space-y-4">
+				{integration === "warpstream" && (
+					<div className="rounded-md border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+						WarpStream clusters are scraped as Prometheus targets — point a target at an
+						agent&apos;s <code className="font-mono text-xs">:8080/metrics</code> endpoint or the
+						hosted Prometheus endpoint with Basic auth.{" "}
+						<a
+							href="https://maple.dev/docs/integrations/warpstream"
+							target="_blank"
+							rel="noreferrer"
+							className="text-foreground underline underline-offset-2 hover:no-underline"
+						>
+							Setup guide
+						</a>
+					</div>
+				)}
+				{integration === "cloudflare" ? (
+					<CloudflareLogpushSection />
+				) : integration === "hazel" ? (
+					<HazelIntegrationCard />
+				) : integration === "planetscale" ? (
+					<ScrapeTargetsSection sourceFilter="planetscale" />
+				) : (
+					// prometheus + warpstream share the generic scrape-target flow
+					<ScrapeTargetsSection sourceFilter="prometheus" />
+				)}
+			</div>
+		</DashboardLayout>
+	)
+}
+
+function IntegrationHeader({ integration }: { integration: IntegrationId }) {
+	const navigate = useNavigate({ from: Route.fullPath })
+	const entry = catalogEntry(integration)
+	const status = useIntegrationStatuses()[integration]
+
+	return (
+		<div className="flex items-center gap-3">
+			<Button
+				variant="ghost"
+				size="icon-sm"
+				aria-label="Back to integrations"
+				onClick={() => navigate({ search: {} })}
+			>
+				<ArrowLeftIcon size={16} />
+			</Button>
+			<IntegrationIconPlate entry={entry} size={18} className="size-9!" />
+			<div className="flex items-center gap-2">
+				<h1 className="text-lg font-semibold">{entry.name}</h1>
+				{status ? <Badge variant={status.variant}>{status.label}</Badge> : null}
+			</div>
+			{entry.docsUrl ? (
+				<a
+					href={entry.docsUrl}
+					target="_blank"
+					rel="noreferrer"
+					className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+				>
+					Docs
+					<ExternalLinkIcon size={12} />
+				</a>
+			) : null}
+		</div>
+	)
+}

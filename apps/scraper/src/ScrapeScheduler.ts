@@ -34,10 +34,18 @@ const hostFromUrl = (url: string): string => {
 	}
 }
 
+/**
+ * Fiber-map key: discovered sub-targets (PlanetScale branches) share one
+ * target id, so each `(id, subTargetKey)` pair runs its own scrape loop.
+ */
+const targetKey = (target: InternalScrapeTarget): string =>
+	`${target.id}:${target.subTargetKey ?? ""}`
+
 /** Restart a target's loop when anything affecting its scrape output changes. */
 const targetFingerprint = (target: InternalScrapeTarget): string =>
 	JSON.stringify([
 		target.url,
+		target.subTargetKey,
 		target.scrapeIntervalSeconds,
 		target.name,
 		target.serviceName,
@@ -69,16 +77,39 @@ export class ScrapeScheduler extends Context.Service<ScrapeScheduler, ScrapeSche
 					buffered.length >= MAX_BUFFERED_RESULTS ? [...buffered.slice(1), result] : [...buffered, result],
 				)
 
-			const recordOutcome = (target: InternalScrapeTarget, scrapedAt: number, error: string | null) =>
-				enqueueResult(new ScrapeResultReport({ targetId: target.id, scrapedAt, error }))
+			interface ScrapeOutcome {
+				readonly error: string | null
+				readonly samplesScraped?: number
+				readonly samplesPostMetricRelabeling?: number
+			}
+
+			const recordOutcome = (
+				target: InternalScrapeTarget,
+				scrapedAt: number,
+				durationMs: number,
+				outcome: ScrapeOutcome,
+			) =>
+				enqueueResult(
+					new ScrapeResultReport({
+						targetId: target.id,
+						scrapedAt,
+						error: outcome.error,
+						subTargetKey: target.subTargetKey,
+						durationMs,
+						...(outcome.samplesScraped !== undefined ? { samplesScraped: outcome.samplesScraped } : {}),
+						...(outcome.samplesPostMetricRelabeling !== undefined
+							? { samplesPostMetricRelabeling: outcome.samplesPostMetricRelabeling }
+							: {}),
+					}),
+				)
 
 			const scrapeOnce = (target: InternalScrapeTarget) =>
 				semaphore.withPermits(1)(
 					Effect.gen(function* () {
 						const scrapeTimeMs = yield* Clock.currentTimeMillis
 
-						const outcome = yield* Effect.gen(function* () {
-							const response = yield* api.scrapeTarget(target.id)
+						const outcome: ScrapeOutcome = yield* Effect.gen(function* () {
+							const response = yield* api.scrapeTarget(target.id, target.subTargetKey)
 							if (response.status < 200 || response.status >= 300) {
 								return yield* Effect.fail(
 									new ApiRequestError({
@@ -115,19 +146,29 @@ export class ScrapeScheduler extends Context.Service<ScrapeScheduler, ScrapeSche
 								droppedSeries: converted.droppedSeriesCount,
 								skippedLines: parsed.skippedLineCount,
 							})
-							return null
+							return {
+								error: null,
+								samplesScraped: parsed.families.reduce((total, family) => total + family.samples.length, 0),
+								samplesPostMetricRelabeling:
+									converted.dataPointCounts.sum +
+									converted.dataPointCounts.gauge +
+									converted.dataPointCounts.histogram,
+							} satisfies ScrapeOutcome
 						}).pipe(
-							Effect.catch((error) => Effect.succeed(error.message)),
-							Effect.catchDefect((defect) => Effect.succeed(Cause.pretty(Cause.die(defect)))),
+							Effect.catch((error) => Effect.succeed<ScrapeOutcome>({ error: error.message })),
+							Effect.catchDefect((defect) =>
+								Effect.succeed<ScrapeOutcome>({ error: Cause.pretty(Cause.die(defect)) }),
+							),
 						)
 
-						yield* recordOutcome(target, scrapeTimeMs, outcome)
-						if (outcome !== null) {
+						const durationMs = (yield* Clock.currentTimeMillis) - scrapeTimeMs
+						yield* recordOutcome(target, scrapeTimeMs, durationMs, outcome)
+						if (outcome.error !== null) {
 							yield* Effect.logWarning("Scrape failed").pipe(
 								Effect.annotateLogs({
 									targetId: target.id,
 									orgId: target.orgId,
-									error: outcome,
+									error: outcome.error,
 								}),
 							)
 						}
@@ -138,6 +179,7 @@ export class ScrapeScheduler extends Context.Service<ScrapeScheduler, ScrapeSche
 								targetId: target.id,
 								targetName: target.name,
 								intervalSeconds: target.scrapeIntervalSeconds,
+								...(target.subTargetKey ? { subTargetKey: target.subTargetKey } : {}),
 							},
 						}),
 					),
@@ -154,15 +196,16 @@ export class ScrapeScheduler extends Context.Service<ScrapeScheduler, ScrapeSche
 				const next = new Map<string, TargetEntry>()
 
 				for (const target of targets) {
+					const key = targetKey(target)
 					const fingerprint = targetFingerprint(target)
-					const existing = current.get(target.id)
+					const existing = current.get(key)
 					if (existing && existing.fingerprint === fingerprint) {
-						next.set(target.id, existing)
+						next.set(key, existing)
 						continue
 					}
 					if (existing) yield* Fiber.interrupt(existing.fiber)
 					const fiber = yield* Effect.forkChild(targetLoop(target))
-					next.set(target.id, { fingerprint, fiber })
+					next.set(key, { fingerprint, fiber })
 				}
 
 				for (const [id, entry] of current) {

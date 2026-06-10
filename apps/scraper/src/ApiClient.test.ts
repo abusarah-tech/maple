@@ -54,6 +54,7 @@ const VALID_TARGET = {
 	name: "Node",
 	serviceName: "node",
 	url: "https://node.example.com/metrics",
+	subTargetKey: null,
 	scrapeIntervalSeconds: 15,
 	labels: { env: "prod" },
 	ingestKey: "maple_pk_org_1_key",
@@ -132,6 +133,25 @@ describe("ApiClient", () => {
 			expect(recorded[0]?.headers.authorization).toBe("Bearer internal-token")
 			expect(response.status).toBe(200)
 			expect(response.body).toContain("up 1")
+		}).pipe(Effect.provide(TestLayer)),
+	)
+
+	it.effect("passes the sub-target key to the proxy as the sub query param", () =>
+		Effect.gen(function* () {
+			const recorded: Array<RecordedRequest> = []
+			const client = yield* ApiClient
+			yield* client
+				.scrapeTarget("target-1", "branch a/1")
+				.pipe(
+					Effect.provideService(
+						FetchHttpClient.Fetch,
+						stubFetch(recorded, () => new Response("up 1", { status: 200 })),
+					),
+				)
+
+			expect(recorded[0]?.url).toBe(
+				"http://api.test/api/internal/prometheus-scrape?targetId=target-1&sub=branch%20a%2F1",
+			)
 		}).pipe(Effect.provide(TestLayer)),
 	)
 

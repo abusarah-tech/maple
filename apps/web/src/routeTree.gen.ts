@@ -21,6 +21,7 @@ import { Route as QueryBuilderLabRouteImport } from './routes/query-builder-lab'
 import { Route as OrgRequiredRouteImport } from './routes/org-required'
 import { Route as MetricsRouteImport } from './routes/metrics'
 import { Route as McpRouteImport } from './routes/mcp'
+import { Route as IntegrationsRouteImport } from './routes/integrations'
 import { Route as DeveloperRouteImport } from './routes/developer'
 import { Route as ConnectorsRouteImport } from './routes/connectors'
 import { Route as ChatRouteImport } from './routes/chat'
@@ -113,6 +114,11 @@ const MetricsRoute = MetricsRouteImport.update({
 const McpRoute = McpRouteImport.update({
   id: '/mcp',
   path: '/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IntegrationsRoute = IntegrationsRouteImport.update({
+  id: '/integrations',
+  path: '/integrations',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DeveloperRoute = DeveloperRouteImport.update({
@@ -294,6 +300,7 @@ export interface FileRoutesByFullPath {
   '/chat': typeof ChatRoute
   '/connectors': typeof ConnectorsRoute
   '/developer': typeof DeveloperRoute
+  '/integrations': typeof IntegrationsRoute
   '/mcp': typeof McpRoute
   '/metrics': typeof MetricsRoute
   '/org-required': typeof OrgRequiredRoute
@@ -341,6 +348,7 @@ export interface FileRoutesByTo {
   '/chat': typeof ChatRoute
   '/connectors': typeof ConnectorsRoute
   '/developer': typeof DeveloperRoute
+  '/integrations': typeof IntegrationsRoute
   '/mcp': typeof McpRoute
   '/metrics': typeof MetricsRoute
   '/org-required': typeof OrgRequiredRoute
@@ -389,6 +397,7 @@ export interface FileRoutesById {
   '/chat': typeof ChatRoute
   '/connectors': typeof ConnectorsRoute
   '/developer': typeof DeveloperRoute
+  '/integrations': typeof IntegrationsRoute
   '/mcp': typeof McpRoute
   '/metrics': typeof MetricsRoute
   '/org-required': typeof OrgRequiredRoute
@@ -438,6 +447,7 @@ export interface FileRouteTypes {
     | '/chat'
     | '/connectors'
     | '/developer'
+    | '/integrations'
     | '/mcp'
     | '/metrics'
     | '/org-required'
@@ -485,6 +495,7 @@ export interface FileRouteTypes {
     | '/chat'
     | '/connectors'
     | '/developer'
+    | '/integrations'
     | '/mcp'
     | '/metrics'
     | '/org-required'
@@ -532,6 +543,7 @@ export interface FileRouteTypes {
     | '/chat'
     | '/connectors'
     | '/developer'
+    | '/integrations'
     | '/mcp'
     | '/metrics'
     | '/org-required'
@@ -580,6 +592,7 @@ export interface RootRouteChildren {
   ChatRoute: typeof ChatRoute
   ConnectorsRoute: typeof ConnectorsRoute
   DeveloperRoute: typeof DeveloperRoute
+  IntegrationsRoute: typeof IntegrationsRoute
   McpRoute: typeof McpRoute
   MetricsRoute: typeof MetricsRoute
   OrgRequiredRoute: typeof OrgRequiredRoute
@@ -707,6 +720,13 @@ declare module '@tanstack/react-router' {
       path: '/mcp'
       fullPath: '/mcp'
       preLoaderRoute: typeof McpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/integrations': {
+      id: '/integrations'
+      path: '/integrations'
+      fullPath: '/integrations'
+      preLoaderRoute: typeof IntegrationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/developer': {
@@ -948,6 +968,7 @@ const rootRouteChildren: RootRouteChildren = {
   ChatRoute: ChatRoute,
   ConnectorsRoute: ConnectorsRoute,
   DeveloperRoute: DeveloperRoute,
+  IntegrationsRoute: IntegrationsRoute,
   McpRoute: McpRoute,
   MetricsRoute: MetricsRoute,
   OrgRequiredRoute: OrgRequiredRoute,

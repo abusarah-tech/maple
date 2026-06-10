@@ -11,7 +11,7 @@ import * as T from "../types"
 import { param } from "../param"
 import { from } from "../query"
 import { table } from "../table"
-import { MetricsGauge, MetricsSum, MetricCatalog } from "../tables"
+import { MetricsSum, MetricCatalog } from "../tables"
 import { compileCH } from "../compile"
 import { resolveMetricTable, metricsSelectExprs } from "./query-helpers"
 
@@ -38,71 +38,6 @@ export interface MetricsTimeseriesOutput {
 	readonly maxValue: number
 	readonly sumValue: number
 	readonly dataPointCount: number
-}
-
-export interface ScrapeTargetChecksOpts {
-	limit?: number
-}
-
-export interface ScrapeTargetChecksOutput {
-	readonly timestamp: string
-	readonly serviceName: string
-	readonly job: string
-	readonly instance: string
-	readonly up: number
-	readonly upPointCount: number
-	readonly durationSeconds: number
-	readonly durationPointCount: number
-	readonly samplesScraped: number
-	readonly samplesScrapedPointCount: number
-	readonly samplesPostMetricRelabeling: number
-	readonly samplesPostMetricRelabelingPointCount: number
-	readonly seriesAdded: number
-	readonly seriesAddedPointCount: number
-}
-
-const SCRAPE_CHECK_METRIC_NAMES = [
-	"up",
-	"scrape_duration_seconds",
-	"scrape_samples_scraped",
-	"scrape_samples_post_metric_relabeling",
-	"scrape_series_added",
-] as const
-
-export function scrapeTargetChecksQuery(opts?: ScrapeTargetChecksOpts) {
-	return from(MetricsGauge)
-		.select(($) => ({
-			timestamp: $.TimeUnix,
-			serviceName: CH.any_($.ServiceName),
-			job: CH.any_($.Attributes.get("job")),
-			instance: CH.any_($.Attributes.get("instance")),
-			up: CH.maxIf($.Value, $.MetricName.eq("up")),
-			upPointCount: CH.countIf($.MetricName.eq("up")),
-			durationSeconds: CH.maxIf($.Value, $.MetricName.eq("scrape_duration_seconds")),
-			durationPointCount: CH.countIf($.MetricName.eq("scrape_duration_seconds")),
-			samplesScraped: CH.maxIf($.Value, $.MetricName.eq("scrape_samples_scraped")),
-			samplesScrapedPointCount: CH.countIf($.MetricName.eq("scrape_samples_scraped")),
-			samplesPostMetricRelabeling: CH.maxIf(
-				$.Value,
-				$.MetricName.eq("scrape_samples_post_metric_relabeling"),
-			),
-			samplesPostMetricRelabelingPointCount: CH.countIf(
-				$.MetricName.eq("scrape_samples_post_metric_relabeling"),
-			),
-			seriesAdded: CH.maxIf($.Value, $.MetricName.eq("scrape_series_added")),
-			seriesAddedPointCount: CH.countIf($.MetricName.eq("scrape_series_added")),
-		}))
-		.where(($) => [
-			$.OrgId.eq(param.string("orgId")),
-			$.TimeUnix.gte(param.dateTime("startTime")),
-			$.TimeUnix.lte(param.dateTime("endTime")),
-			$.MetricName.in_(...SCRAPE_CHECK_METRIC_NAMES),
-			$.Attributes.get("maple_scrape_target_id").eq(param.string("targetId")),
-		])
-		.groupBy("timestamp")
-		.orderBy(["timestamp", "desc"])
-		.limit(opts?.limit ?? 50)
-		.format("JSON")
 }
 
 // ---------------------------------------------------------------------------

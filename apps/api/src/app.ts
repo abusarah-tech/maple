@@ -52,6 +52,7 @@ import { OrganizationService } from "./services/OrganizationService"
 import { QueryEngineService } from "./services/QueryEngineService"
 import { RecommendationIssueService } from "./services/RecommendationIssueService"
 import { RawSqlChartService } from "@maple/query-engine/runtime"
+import { PlanetScaleDiscoveryService } from "./services/PlanetScaleDiscoveryService"
 import { ScrapeTargetsService } from "./services/ScrapeTargetsService"
 import { WarehouseQueryService } from "./lib/WarehouseQueryService"
 
@@ -85,7 +86,10 @@ export const CoreServicesLive = Layer.mergeAll(
 	OrgOpenRouterSettingsService.layer,
 	OrgClickHouseSettingsService.layer,
 	OrganizationService.layer,
-	ScrapeTargetsService.layer,
+	// Shared with ScrapeTargetsService via layer memoization so the proxy and
+	// the internal target list resolve sub-targets from one discovery cache.
+	PlanetScaleDiscoveryService.layer,
+	ScrapeTargetsService.layer.pipe(Layer.provide(PlanetScaleDiscoveryService.layer)),
 	IngestAttributeMappingService.layer,
 ).pipe(Layer.provideMerge(InfraLive))
 

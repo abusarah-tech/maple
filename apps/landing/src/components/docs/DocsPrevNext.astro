@@ -13,7 +13,7 @@ const currentDoc = allDocs.find((d) => d.id === currentSlug);
 const activeSdk: string | null = currentDoc?.data.sdk ?? null;
 
 const sdkGroupOrder = ["Effect SDK", "Platforms"];
-const universalGroupOrder = ["Getting Started", "Concepts", "Infrastructure"];
+const universalGroupOrder = ["Getting Started", "Concepts", "Infrastructure", "Integrations"];
 
 const groupSort = (groupOrder: string[]) =>
     (a: typeof allDocs[number], b: typeof allDocs[number]) => {

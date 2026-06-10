@@ -43,7 +43,7 @@ const languageGuides = allDocs
 const conceptual = allDocs.filter((d) => !d.data.sdk);
 
 const sdkGroups = orderGroups(groupBy(effectDocs), ["Effect SDK", "Platforms"]);
-const conceptualGroups = orderGroups(groupBy(conceptual), ["Getting Started", "Concepts", "Infrastructure", "Local Mode"]);
+const conceptualGroups = orderGroups(groupBy(conceptual), ["Getting Started", "Concepts", "Infrastructure", "Integrations", "Local Mode"]);
 
 // Language registry for Section 02 — icon, display label, runtime hint
 const LANG_META: Record<string, { name: string; Icon: any; meta: string }> = {

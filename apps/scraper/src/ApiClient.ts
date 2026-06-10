@@ -21,7 +21,10 @@ export interface ApiClientShape {
 	 * decrypts credentials and applies SSRF protection; `status` is the
 	 * upstream target's HTTP status.
 	 */
-	readonly scrapeTarget: (targetId: string) => Effect.Effect<ScrapeProxyResponse, ApiRequestError>
+	readonly scrapeTarget: (
+		targetId: string,
+		subTargetKey?: string | null,
+	) => Effect.Effect<ScrapeProxyResponse, ApiRequestError>
 	/** Report scrape outcomes to `/api/internal/scrape-results`. */
 	readonly reportResults: (results: ReadonlyArray<ScrapeResultReport>) => Effect.Effect<void, ApiRequestError>
 }
@@ -72,9 +75,13 @@ export class ApiClient extends Context.Service<ApiClient, ApiClientShape>()("@ma
 			)
 		})
 
-		const scrapeTarget = Effect.fn("ApiClient.scrapeTarget")(function* (targetId: string) {
+		const scrapeTarget = Effect.fn("ApiClient.scrapeTarget")(function* (
+			targetId: string,
+			subTargetKey?: string | null,
+		) {
+			const sub = subTargetKey ? `&sub=${encodeURIComponent(subTargetKey)}` : ""
 			const request = HttpClientRequest.get(
-				`${env.MAPLE_API_URL}/api/internal/prometheus-scrape?targetId=${encodeURIComponent(targetId)}`,
+				`${env.MAPLE_API_URL}/api/internal/prometheus-scrape?targetId=${encodeURIComponent(targetId)}${sub}`,
 				{ headers: authHeaders },
 			)
 			const response = yield* client.execute(request).pipe(Effect.mapError(transportError))

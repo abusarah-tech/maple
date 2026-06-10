@@ -10,24 +10,9 @@ import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 
 const HAZEL_DOCS_URL = "https://hazel.sh/docs/integrations/maple"
 /** Hazel's brand orange — third-party brand color, no app token applies. */
-const HAZEL_ACCENT = "#F46F0F"
+export const HAZEL_ACCENT = "#F46F0F"
 
-export function IntegrationsSection() {
-	return (
-		<div className="space-y-4">
-			<header className="space-y-1">
-				<h2 className="text-lg font-semibold">Integrations</h2>
-				<p className="text-sm text-muted-foreground">
-					Connect Maple to third-party services so they can act on alerts, incidents, and analytics
-					events.
-				</p>
-			</header>
-			<HazelIntegrationCard />
-		</div>
-	)
-}
-
-function HazelIntegrationCard() {
+export function HazelIntegrationCard() {
 	const statusResult = useAtomValue(
 		MapleApiAtomClient.query("integrations", "hazelStatus", {
 			reactivityKeys: ["hazelIntegrationStatus"],

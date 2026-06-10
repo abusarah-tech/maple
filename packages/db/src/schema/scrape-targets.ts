@@ -8,6 +8,8 @@ export const scrapeTargets = sqliteTable(
 		name: text("name").notNull(),
 		serviceName: text("service_name"),
 		url: text("url").notNull(),
+		targetType: text("target_type").notNull().default("prometheus"),
+		discoveryConfigJson: text("discovery_config_json"),
 		scrapeIntervalSeconds: integer("scrape_interval_seconds", { mode: "number" }).notNull().default(15),
 		labelsJson: text("labels_json"),
 		authType: text("auth_type").notNull().default("none"),
@@ -28,3 +30,31 @@ export const scrapeTargets = sqliteTable(
 
 export type ScrapeTargetRow = typeof scrapeTargets.$inferSelect
 export type ScrapeTargetInsert = typeof scrapeTargets.$inferInsert
+
+/**
+ * One row per scheduled scrape attempt, reported by the scraper via
+ * `POST /api/internal/scrape-results`. Durable check history for the
+ * connectors UI — pruned to 24h with a per-target row cap.
+ */
+export const scrapeTargetChecks = sqliteTable(
+	"scrape_target_checks",
+	{
+		id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
+		targetId: text("target_id")
+			.notNull()
+			.references(() => scrapeTargets.id, { onDelete: "cascade" }),
+		orgId: text("org_id").notNull(),
+		/** Sub-target discriminator (e.g. PlanetScale branch); empty string for plain targets. */
+		subTargetKey: text("sub_target_key").notNull().default(""),
+		checkedAt: integer("checked_at", { mode: "number" }).notNull(),
+		/** Null on success; pretty-printed failure otherwise. */
+		error: text("error"),
+		durationMs: integer("duration_ms", { mode: "number" }),
+		samplesScraped: integer("samples_scraped", { mode: "number" }),
+		samplesPostRelabel: integer("samples_post_relabel", { mode: "number" }),
+	},
+	(table) => [index("scrape_target_checks_target_checked_idx").on(table.targetId, table.checkedAt)],
+)
+
+export type ScrapeTargetCheckRow = typeof scrapeTargetChecks.$inferSelect
+export type ScrapeTargetCheckInsert = typeof scrapeTargetChecks.$inferInsert

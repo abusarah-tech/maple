@@ -4,7 +4,7 @@
 	"type": "module",
 	"scripts": {
 		"start": "bun run src/main.ts",
-		"dev": "bun run --watch src/main.ts",
+		"dev": "bun --env-file=../../.env.local --watch src/main.ts",
 		"test": "vitest run",
 		"typecheck": "tsc --noEmit"
 	},

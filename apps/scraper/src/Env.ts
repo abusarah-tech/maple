@@ -1,4 +1,4 @@
-import { Config, Context, Effect, Layer, type Redacted } from "effect"
+import { Config, Context, Effect, Layer, Redacted } from "effect"
 
 export interface ScraperEnvShape {
 	/** Base URL of the Maple API, e.g. `https://api.maple.dev`. */
@@ -19,10 +19,19 @@ export interface ScraperEnvShape {
 	readonly PORT: number
 }
 
+// Defaults target the local dev stack (`bun dev`: api on 3472, ingest on
+// 3474, the docker-compose dev token) so the scraper boots without extra
+// configuration instead of crashing the turbo dev TUI. Production overrides
+// all three (see apps/scraper/railway.json deploy notes); a missing override
+// degrades to visible per-reconcile warnings, never a crash loop.
 const envConfig = Config.all({
-	MAPLE_API_URL: Config.string("MAPLE_API_URL"),
-	SD_INTERNAL_TOKEN: Config.redacted("SD_INTERNAL_TOKEN"),
-	MAPLE_INGEST_URL: Config.string("MAPLE_INGEST_URL"),
+	MAPLE_API_URL: Config.string("MAPLE_API_URL").pipe(Config.withDefault("http://127.0.0.1:3472")),
+	SD_INTERNAL_TOKEN: Config.redacted("SD_INTERNAL_TOKEN").pipe(
+		Config.withDefault(Redacted.make("maple-sd-dev-token")),
+	),
+	MAPLE_INGEST_URL: Config.string("MAPLE_INGEST_URL").pipe(
+		Config.withDefault("http://127.0.0.1:3474"),
+	),
 	SCRAPER_CONCURRENCY: Config.number("SCRAPER_CONCURRENCY").pipe(Config.withDefault(10)),
 	SCRAPER_RECONCILE_INTERVAL_SECONDS: Config.number("SCRAPER_RECONCILE_INTERVAL_SECONDS").pipe(
 		Config.withDefault(60),

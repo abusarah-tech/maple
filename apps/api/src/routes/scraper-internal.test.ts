@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { Effect, Option } from "effect"
+import { Effect, Option, Schema } from "effect"
+import { ScrapeResultReportList } from "@maple/domain/http"
 import { isValidInternalBearer } from "../lib/internal-auth"
 import { toInternalScrapeTarget } from "./scraper-internal.http"
 
@@ -62,5 +63,65 @@ describe("toInternalScrapeTarget", () => {
 			toInternalScrapeTarget({ ...baseRow, scrapeIntervalSeconds: 2 }, INGEST_KEY),
 		)
 		expect(Option.isNone(outOfRange)).toBe(true)
+	})
+
+	it("expands a discovered sub-target with its url, key, and merged labels", async () => {
+		const result = await Effect.runPromise(
+			toInternalScrapeTarget(baseRow, INGEST_KEY, {
+				url: "https://branch-1.metrics.psdb.cloud/metrics",
+				subTargetKey: "branch-1",
+				labels: { planetscale_database_branch_id: "branch-1", env: "discovery" },
+			}),
+		)
+		expect(Option.isSome(result)).toBe(true)
+		if (Option.isNone(result)) return
+		expect(result.value.id).toBe(baseRow.id)
+		expect(result.value.url).toBe("https://branch-1.metrics.psdb.cloud/metrics")
+		expect(result.value.subTargetKey).toBe("branch-1")
+		// The target's own labelsJson wins over discovery labels on conflicts.
+		expect(result.value.labels).toEqual({
+			planetscale_database_branch_id: "branch-1",
+			env: "prod",
+		})
+	})
+
+	it("defaults subTargetKey to null for plain targets", async () => {
+		const result = await Effect.runPromise(toInternalScrapeTarget(baseRow, INGEST_KEY))
+		expect(Option.isSome(result)).toBe(true)
+		if (Option.isNone(result)) return
+		expect(result.value.subTargetKey).toBeNull()
+	})
+})
+
+describe("ScrapeResultReportList decoding", () => {
+	const decode = Schema.decodeUnknownSync(ScrapeResultReportList)
+
+	it("accepts reports with check metadata", () => {
+		const reports = decode([
+			{
+				targetId: "11111111-1111-4111-8111-111111111111",
+				scrapedAt: 1750000000000,
+				error: null,
+				subTargetKey: "branch-1",
+				durationMs: 250,
+				samplesScraped: 120,
+				samplesPostMetricRelabeling: 118,
+			},
+		])
+		expect(reports[0]?.durationMs).toBe(250)
+		expect(reports[0]?.samplesScraped).toBe(120)
+		expect(reports[0]?.samplesPostMetricRelabeling).toBe(118)
+	})
+
+	it("accepts legacy reports without check metadata (older scraper deploys)", () => {
+		const reports = decode([
+			{
+				targetId: "11111111-1111-4111-8111-111111111111",
+				scrapedAt: 1750000000000,
+				error: "target returned HTTP 503",
+			},
+		])
+		expect(reports[0]?.error).toBe("target returned HTTP 503")
+		expect(reports[0]?.durationMs).toBeUndefined()
 	})
 })

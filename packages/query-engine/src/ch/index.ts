@@ -196,13 +196,10 @@ export {
 	type MetricsBreakdownOutput,
 	listMetricsQuery,
 	metricsSummaryQuery,
-	scrapeTargetChecksQuery,
 	type ListMetricsOpts,
 	type ListMetricsOutput,
 	type MetricsSummaryOpts,
 	type MetricsSummaryOutput,
-	type ScrapeTargetChecksOpts,
-	type ScrapeTargetChecksOutput,
 } from "./queries/metrics"
 
 // Queries — Logs

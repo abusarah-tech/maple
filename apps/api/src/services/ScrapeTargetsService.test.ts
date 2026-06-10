@@ -1,10 +1,12 @@
 import { afterEach, describe, it } from "@effect/vitest"
 import { expect } from "vitest"
-import { ConfigProvider, Effect, Layer, Schema } from "effect"
+import { ConfigProvider, Effect, Exit, Layer, Schema } from "effect"
+import { TestClock } from "effect/testing"
 import { CreateScrapeTargetRequest, OrgId, ScrapeIntervalSeconds, ScrapeTargetId } from "@maple/domain/http"
 import { DatabaseLibsqlLive } from "../lib/DatabaseLibsqlLive"
 import { Env } from "../lib/Env"
 import { cleanupTempDirs, createTempDbUrl as makeTempDb } from "../lib/test-sqlite"
+import { PlanetScaleDiscoveryService } from "./PlanetScaleDiscoveryService"
 import { ScrapeTargetsService } from "./ScrapeTargetsService"
 
 const createdTempDirs: string[] = []
@@ -35,6 +37,7 @@ const makeConfig = (url: string) =>
 
 const makeLayer = (url: string) =>
 	ScrapeTargetsService.layer.pipe(
+		Layer.provide(PlanetScaleDiscoveryService.layer),
 		Layer.provide(DatabaseLibsqlLive),
 		Layer.provide(Env.layer),
 		Layer.provide(makeConfig(url)),
@@ -164,6 +167,245 @@ describe("ScrapeTargetsService", () => {
 
 			const updated = yield* service.get(orgId, target.id)
 			expect(updated.lastScrapeAt).toBe(new Date(scrapedAt).toISOString())
+		}).pipe(Effect.provide(makeLayer(url)))
+	})
+
+	it.effect("creates a PlanetScale target with a derived discovery URL and forced token auth", () => {
+		const { url } = createTempDbUrl()
+		globalThis.fetch = (async () => new Response("ok", { status: 200 })) as typeof fetch
+		return Effect.gen(function* () {
+			const service = yield* ScrapeTargetsService
+			const target = yield* service.create(
+				asOrgId("org_1"),
+				new CreateScrapeTargetRequest({
+					name: "PlanetScale Prod",
+					targetType: "planetscale",
+					organization: "my-org",
+					authCredentials: JSON.stringify({ tokenId: "tok_id", tokenSecret: "tok_secret" }),
+				}),
+			)
+
+			expect(target.targetType).toBe("planetscale")
+			expect(target.organization).toBe("my-org")
+			expect(target.url).toBe("https://api.planetscale.com/v1/organizations/my-org/metrics")
+			expect(target.authType).toBe("token")
+			expect(target.hasCredentials).toBe(true)
+			// PlanetScale's documented default scrape interval.
+			expect(target.scrapeIntervalSeconds).toBe(30)
+		}).pipe(Effect.provide(makeLayer(url)))
+	})
+
+	it.effect("rejects invalid PlanetScale create requests", () => {
+		const { url } = createTempDbUrl()
+		return Effect.gen(function* () {
+			const service = yield* ScrapeTargetsService
+			const orgId = asOrgId("org_1")
+
+			const missingOrg = yield* service
+				.create(
+					orgId,
+					new CreateScrapeTargetRequest({
+						name: "PS",
+						targetType: "planetscale",
+						authCredentials: JSON.stringify({ tokenId: "a", tokenSecret: "b" }),
+					}),
+				)
+				.pipe(Effect.flip)
+			expect(missingOrg.message).toContain("organization is required")
+
+			const withUrl = yield* service
+				.create(
+					orgId,
+					new CreateScrapeTargetRequest({
+						name: "PS",
+						targetType: "planetscale",
+						organization: "my-org",
+						url: "https://example.com/metrics",
+						authCredentials: JSON.stringify({ tokenId: "a", tokenSecret: "b" }),
+					}),
+				)
+				.pipe(Effect.flip)
+			expect(withUrl.message).toContain("do not provide a url")
+
+			const badCredentials = yield* service
+				.create(
+					orgId,
+					new CreateScrapeTargetRequest({
+						name: "PS",
+						targetType: "planetscale",
+						organization: "my-org",
+						authCredentials: JSON.stringify({ token: "not-a-service-token" }),
+					}),
+				)
+				.pipe(Effect.flip)
+			expect(badCredentials.message).toContain("tokenId")
+
+			const missingUrl = yield* service
+				.create(orgId, new CreateScrapeTargetRequest({ name: "Prom" }))
+				.pipe(Effect.flip)
+			expect(missingUrl.message).toContain("url is required")
+		}).pipe(Effect.provide(makeLayer(url)))
+	})
+
+	it.effect("prefixes sub-target failures with the branch key in lastScrapeError", () => {
+		const { url } = createTempDbUrl()
+		globalThis.fetch = (async () => new Response("ok", { status: 200 })) as typeof fetch
+		return Effect.gen(function* () {
+			const service = yield* ScrapeTargetsService
+			const orgId = asOrgId("org_1")
+			const target = yield* service.create(
+				orgId,
+				new CreateScrapeTargetRequest({
+					name: "PlanetScale Prod",
+					targetType: "planetscale",
+					organization: "my-org",
+					authCredentials: JSON.stringify({ tokenId: "a", tokenSecret: "b" }),
+				}),
+			)
+
+			yield* service.recordScrapeResults([
+				{ targetId: target.id, scrapedAt: 1750000000000, error: "HTTP 503", subTargetKey: "branch-1" },
+			])
+			const failed = yield* service.get(orgId, target.id)
+			expect(failed.lastScrapeError).toBe("[branch:branch-1] HTTP 503")
+
+			// Any branch success clears the rollup error.
+			yield* service.recordScrapeResults([
+				{ targetId: target.id, scrapedAt: 1750000015000, error: null, subTargetKey: "branch-2" },
+			])
+			const recovered = yield* service.get(orgId, target.id)
+			expect(recovered.lastScrapeError).toBeNull()
+		}).pipe(Effect.provide(makeLayer(url)))
+	})
+
+	it.effect("persists scheduled check rows and lists them newest-first", () => {
+		const { url } = createTempDbUrl()
+		return Effect.gen(function* () {
+			const service = yield* ScrapeTargetsService
+			const orgId = asOrgId("org_1")
+			const target = yield* service.create(
+				orgId,
+				new CreateScrapeTargetRequest({
+					name: "Node Exporter",
+					url: "https://metrics.example.com/metrics",
+					scrapeIntervalSeconds: asScrapeIntervalSeconds(15),
+				}),
+			)
+
+			const scrapedAt = 1750000000000
+			yield* TestClock.setTime(scrapedAt + 30_000)
+			yield* service.recordScrapeResults([
+				{
+					targetId: target.id,
+					scrapedAt,
+					error: null,
+					durationMs: 250,
+					samplesScraped: 120,
+					samplesPostMetricRelabeling: 118,
+				},
+				{
+					targetId: target.id,
+					scrapedAt: scrapedAt + 15_000,
+					error: "target returned HTTP 503",
+					subTargetKey: "branch-1",
+					durationMs: 1100,
+				},
+			])
+
+			const checks = yield* service.listChecks(orgId, target.id, {})
+			expect(checks).toHaveLength(2)
+			expect(checks[0]?.checkedAt).toBe(scrapedAt + 15_000)
+			expect(checks[0]?.error).toBe("target returned HTTP 503")
+			expect(checks[0]?.subTargetKey).toBe("branch-1")
+			expect(checks[0]?.durationMs).toBe(1100)
+			expect(checks[0]?.samplesScraped).toBeNull()
+			expect(checks[1]?.checkedAt).toBe(scrapedAt)
+			expect(checks[1]?.error).toBeNull()
+			expect(checks[1]?.subTargetKey).toBe("")
+			expect(checks[1]?.durationMs).toBe(250)
+			expect(checks[1]?.samplesScraped).toBe(120)
+			expect(checks[1]?.samplesPostRelabel).toBe(118)
+
+			// Time-range + limit filtering.
+			const limited = yield* service.listChecks(orgId, target.id, { limit: 1 })
+			expect(limited).toHaveLength(1)
+			expect(limited[0]?.checkedAt).toBe(scrapedAt + 15_000)
+			const windowed = yield* service.listChecks(orgId, target.id, {
+				startTime: scrapedAt - 1,
+				endTime: scrapedAt + 1,
+			})
+			expect(windowed).toHaveLength(1)
+			expect(windowed[0]?.checkedAt).toBe(scrapedAt)
+		}).pipe(Effect.provide(makeLayer(url)))
+	})
+
+	it.effect("manual probes update the target but record no check rows", () => {
+		const { url } = createTempDbUrl()
+		globalThis.fetch = (async () => new Response("up 1\n", { status: 200 })) as typeof fetch
+		return Effect.gen(function* () {
+			const service = yield* ScrapeTargetsService
+			const orgId = asOrgId("org_1")
+			const target = yield* service.create(
+				orgId,
+				new CreateScrapeTargetRequest({
+					name: "Node Exporter",
+					url: "https://metrics.example.com/metrics",
+					scrapeIntervalSeconds: asScrapeIntervalSeconds(15),
+				}),
+			)
+
+			yield* TestClock.setTime(1750000000000)
+			const probed = yield* service.probe(orgId, target.id)
+			expect(probed.success).toBe(true)
+			expect(probed.lastScrapeAt).not.toBeNull()
+
+			const checks = yield* service.listChecks(orgId, target.id, {})
+			expect(checks).toHaveLength(0)
+		}).pipe(Effect.provide(makeLayer(url)))
+	})
+
+	it.effect("prunes check rows older than the 24h retention window", () => {
+		const { url } = createTempDbUrl()
+		return Effect.gen(function* () {
+			const service = yield* ScrapeTargetsService
+			const orgId = asOrgId("org_1")
+			const target = yield* service.create(
+				orgId,
+				new CreateScrapeTargetRequest({
+					name: "Node Exporter",
+					url: "https://metrics.example.com/metrics",
+					scrapeIntervalSeconds: asScrapeIntervalSeconds(15),
+				}),
+			)
+
+			const now = 1750000000000
+			yield* TestClock.setTime(now)
+			yield* service.recordScrapeResults([
+				{ targetId: target.id, scrapedAt: now - 25 * 60 * 60 * 1000, error: null },
+				{ targetId: target.id, scrapedAt: now - 60 * 60 * 1000, error: null },
+			])
+
+			const checks = yield* service.listChecks(orgId, target.id, {})
+			expect(checks).toHaveLength(1)
+			expect(checks[0]?.checkedAt).toBe(now - 60 * 60 * 1000)
+		}).pipe(Effect.provide(makeLayer(url)))
+	})
+
+	it.effect("listChecks rejects targets that belong to another org", () => {
+		const { url } = createTempDbUrl()
+		return Effect.gen(function* () {
+			const service = yield* ScrapeTargetsService
+			const target = yield* service.create(
+				asOrgId("org_1"),
+				new CreateScrapeTargetRequest({
+					name: "Node Exporter",
+					url: "https://metrics.example.com/metrics",
+					scrapeIntervalSeconds: asScrapeIntervalSeconds(15),
+				}),
+			)
+
+			const result = yield* service.listChecks(asOrgId("org_2"), target.id, {}).pipe(Effect.exit)
+			expect(Exit.isFailure(result)).toBe(true)
 		}).pipe(Effect.provide(makeLayer(url)))
 	})
 })

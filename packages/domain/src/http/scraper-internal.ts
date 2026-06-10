@@ -13,6 +13,14 @@ export class InternalScrapeTarget extends Schema.Class<InternalScrapeTarget>("In
 	name: Schema.String,
 	serviceName: Schema.NullOr(Schema.String),
 	url: Schema.String,
+	/**
+	 * Discriminates discovered sub-targets that share one logical target row
+	 * (e.g. PlanetScale database branches resolved via http_sd). `null` for
+	 * plain Prometheus targets. The scraper schedules one fiber per
+	 * `(id, subTargetKey)` pair and echoes the key back in result reports and
+	 * the scrape-proxy `sub` query param.
+	 */
+	subTargetKey: Schema.NullOr(Schema.String),
 	scrapeIntervalSeconds: ScrapeIntervalSeconds,
 	/** Parsed `labelsJson` — extra metric attributes configured on the target. */
 	labels: Schema.Record(Schema.String, Schema.String),
@@ -33,6 +41,14 @@ export class ScrapeResultReport extends Schema.Class<ScrapeResultReport>("Scrape
 	scrapedAt: Schema.Number,
 	/** Null on success; pretty-printed failure otherwise. */
 	error: Schema.NullOr(Schema.String),
+	/** Sub-target discriminator echoed from `InternalScrapeTarget.subTargetKey`. */
+	subTargetKey: Schema.optionalKey(Schema.NullOr(Schema.String)),
+	/** Wall-clock duration of the scrape attempt (fetch + parse + ingest). */
+	durationMs: Schema.optionalKey(Schema.Number),
+	/** Prometheus samples parsed from the exposition (success only). */
+	samplesScraped: Schema.optionalKey(Schema.Number),
+	/** OTLP data points actually exported after conversion/drops (success only). */
+	samplesPostMetricRelabeling: Schema.optionalKey(Schema.Number),
 }) {}
 
 export const ScrapeResultReportList = Schema.Array(ScrapeResultReport)

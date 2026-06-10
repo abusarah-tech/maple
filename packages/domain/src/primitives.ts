@@ -146,11 +146,17 @@ export const ScrapeIntervalSeconds = Schema.Number.check(
 )
 export type ScrapeIntervalSeconds = Schema.Schema.Type<typeof ScrapeIntervalSeconds>
 
-export const ScrapeAuthType = Schema.Literals(["none", "bearer", "basic"]).annotate({
+export const ScrapeAuthType = Schema.Literals(["none", "bearer", "basic", "token"]).annotate({
 	identifier: "@maple/ScrapeAuthType",
 	title: "Scrape Auth Type",
 })
 export type ScrapeAuthType = Schema.Schema.Type<typeof ScrapeAuthType>
+
+export const ScrapeTargetType = Schema.Literals(["prometheus", "planetscale"]).annotate({
+	identifier: "@maple/ScrapeTargetType",
+	title: "Scrape Target Type",
+})
+export type ScrapeTargetType = Schema.Schema.Type<typeof ScrapeTargetType>
 
 export const IngestAttributeMappingId = MapleUuidId(
 	"@maple/IngestAttributeMappingId",
