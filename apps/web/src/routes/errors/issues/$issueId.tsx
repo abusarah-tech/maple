@@ -5,6 +5,7 @@ import { Exit, Schema } from "effect"
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
 
+import { AiTriageCard } from "@/components/ai-triage/ai-triage-card"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { IssueCommentComposer } from "@/components/errors/issue-comment-composer"
 import { IssueHero } from "@/components/errors/issue-hero"
@@ -202,7 +203,6 @@ function IssueDetailPage() {
 		.onSuccess((detail) => {
 			const { issue, timeseries, sampleTraces, incidents } = detail
 			const totalInWindow = timeseries.reduce((sum, b) => sum + b.count, 0)
-			const events = Result.isSuccess(eventsResult) ? eventsResult.value.events : []
 
 			return (
 				<DashboardLayout
@@ -239,11 +239,27 @@ function IssueDetailPage() {
 						<section className="space-y-4">
 							<IssueHero issue={issue} />
 							<IssueOccurrenceSparkline data={timeseries} />
+							<AiTriageCard
+								incidentKind="error"
+								incidentId={
+									(incidents.find((i) => i.status === "open") ?? incidents[0])?.id ?? null
+								}
+								issueId={issueId}
+							/>
 						</section>
 
 						<section aria-labelledby="activity-heading">
 							<SectionHeader id="activity-heading" label="Activity" />
-							<IssueTimeline events={events} />
+							{Result.builder(eventsResult)
+								.onError(() => (
+									<div className="py-6 text-center text-sm text-destructive">
+										Failed to load the activity timeline.
+									</div>
+								))
+								.onSuccess((value) => <IssueTimeline events={value.events} />)
+								.orElse(() => (
+									<Skeleton className="h-20 w-full" />
+								))}
 							<IssueCommentComposer
 								value={commentDraft}
 								onChange={setCommentDraft}

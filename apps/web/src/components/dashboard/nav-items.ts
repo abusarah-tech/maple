@@ -90,6 +90,13 @@ export const investigateNavItems: NavItem[] = [
 		href: "/errors",
 		icon: CircleWarningIcon,
 	},
+	// Anomalies is reachable at /anomalies but hidden from the sidebar until the
+	// detector has been validated against production baselines.
+	// {
+	// 	title: "Anomalies",
+	// 	href: "/anomalies",
+	// 	icon: ChartBarTrendUpIcon,
+	// },
 	{
 		title: "Alerts",
 		href: "/alerts",
