@@ -1,4 +1,4 @@
-import { Navigate, createFileRoute, useNavigate } from "@tanstack/react-router"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { effectRoute } from "@effect-router/core"
 import { Schema } from "effect"
 
@@ -8,7 +8,6 @@ import { ReplaysFilterSidebar } from "@/components/replays/replays-filter-sideba
 import { ReplaysToolbar } from "@/components/replays/replays-toolbar"
 import { BooleanFromStringParam } from "@/lib/search-params"
 import { useEffectiveTimeRange } from "@/hooks/use-effective-time-range"
-import { useSessionReplaysEnabled } from "@/hooks/use-session-replays-enabled"
 import { Result, useAtomValue } from "@/lib/effect-atom"
 import {
 	listReplaysResultAtom,
@@ -20,7 +19,6 @@ import { PageRefreshProvider } from "@/components/time-range-picker/page-refresh
 import type { TimeRange } from "@/components/time-range-picker/types"
 import { QueryErrorState } from "@/components/common/query-error-state"
 import { Skeleton } from "@maple/ui/components/ui/skeleton"
-import { Badge } from "@maple/ui/components/ui/badge"
 
 const replaysSearchSchema = Schema.Struct({
 	startTime: Schema.optional(Schema.String),
@@ -40,12 +38,6 @@ export const Route = effectRoute(createFileRoute("/replays/"))({
 })
 
 function ReplaysPage() {
-	const sessionReplaysEnabled = useSessionReplaysEnabled()
-	if (!sessionReplaysEnabled) return <Navigate to="/" replace />
-	return <ReplaysPageContent />
-}
-
-function ReplaysPageContent() {
 	const search = Route.useSearch()
 	const navigate = useNavigate({ from: Route.fullPath })
 	const { startTime, endTime } = useEffectiveTimeRange(
@@ -83,12 +75,7 @@ function ReplaysPageContent() {
 	const errorSessions = Result.isSuccess(facetsResult) ? facetsResult.value.errorCount : 0
 
 	const titleContent = (
-		<div className="flex items-center gap-2">
-			<h1 className="truncate text-2xl font-semibold tracking-tight">Session Replays</h1>
-			<Badge variant="secondary" className="text-xs font-medium">
-				Beta
-			</Badge>
-		</div>
+		<h1 className="truncate text-2xl font-semibold tracking-tight">Session Replays</h1>
 	)
 
 	const headerActions = (

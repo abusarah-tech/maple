@@ -32,7 +32,6 @@ import {
 import { useDashboardPreferences } from "@/hooks/use-dashboard-preferences"
 import { useDashboardStore } from "@/hooks/use-dashboard-store"
 import { useInfraEnabled } from "@/hooks/use-infra-enabled"
-import { useSessionReplaysEnabled } from "@/hooks/use-session-replays-enabled"
 
 const MAX_RESULTS = 12
 
@@ -113,7 +112,6 @@ function PaletteContent({
 	const { dashboards } = useDashboardStore()
 	const { favorites } = useDashboardPreferences()
 	const infraEnabled = useInfraEnabled()
-	const sessionReplaysEnabled = useSessionReplaysEnabled()
 
 	// The forced-open Autocomplete stopPropagation()s Escape (and swallows ⌘K)
 	// before the Dialog or the document-level hotkey manager sees it, so handle
@@ -136,7 +134,7 @@ function PaletteContent({
 		const navItems = [
 			...mainNavItems,
 			...topologyNavItems,
-			...visibleSignalsNavItems({ infraEnabled, sessionReplaysEnabled }),
+			...visibleSignalsNavItems({ infraEnabled }),
 			...investigateNavItems,
 		]
 		const navigation: PaletteEntry[] = [
@@ -200,7 +198,7 @@ function PaletteContent({
 		]
 
 		return [...navigation, ...dashboardEntries, ...actions]
-	}, [dashboards, favorites, infraEnabled, sessionReplaysEnabled, theme, setTheme, onShowShortcuts])
+	}, [dashboards, favorites, infraEnabled, theme, setTheme, onShowShortcuts])
 
 	const fuse = useMemo(() => new Fuse(entries, FUSE_OPTIONS), [entries])
 
