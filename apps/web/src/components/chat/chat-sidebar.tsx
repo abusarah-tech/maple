@@ -12,6 +12,7 @@ import {
 	BellIcon,
 	ChartLineIcon,
 	DotsIcon,
+	LinkIcon,
 	PencilIcon,
 	PlusIcon,
 	TrashIcon,
@@ -26,6 +27,8 @@ interface ChatSidebarProps {
 	onClose: (id: string) => void
 	onCreate: () => void
 	onRename: (id: string, title: string) => void
+	/** Copy a read-only share link for the conversation to the clipboard. */
+	onShare?: (tab: ChatTab) => void
 	/** Layout overrides — desktop passes the fixed-width rail, the mobile sheet passes full width. */
 	className?: string
 }
@@ -85,6 +88,7 @@ export function ChatSidebar({
 	onClose,
 	onCreate,
 	onRename,
+	onShare,
 	className,
 }: ChatSidebarProps) {
 	const groups = useMemo(() => groupTabs(tabs, Date.now()), [tabs])
@@ -132,6 +136,7 @@ export function ChatSidebar({
 												onRename(id, title)
 												setRenamingId(null)
 											}}
+											onShare={onShare}
 											onStartRename={() => setRenamingId(tab.id)}
 											onCancelRename={() => setRenamingId(null)}
 										/>
@@ -155,6 +160,7 @@ interface ChatSidebarRowProps {
 	onSelect: (id: string) => void
 	onClose: (id: string) => void
 	onRename: (id: string, title: string) => void
+	onShare?: (tab: ChatTab) => void
 	onStartRename: () => void
 	onCancelRename: () => void
 }
@@ -168,6 +174,7 @@ function ChatSidebarRow({
 	onSelect,
 	onClose,
 	onRename,
+	onShare,
 	onStartRename,
 	onCancelRename,
 }: ChatSidebarRowProps) {
@@ -286,6 +293,12 @@ function ChatSidebarRow({
 								<PencilIcon size={14} />
 								Rename
 							</DropdownMenuItem>
+							{onShare && (
+								<DropdownMenuItem onClick={() => onShare(tab)}>
+									<LinkIcon size={14} />
+									Copy link
+								</DropdownMenuItem>
+							)}
 							<DropdownMenuItem
 								disabled={!canDelete}
 								variant="destructive"
