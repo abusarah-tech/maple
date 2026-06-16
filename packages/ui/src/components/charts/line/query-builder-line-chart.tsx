@@ -3,7 +3,7 @@ import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
 import { cn } from "../../../lib/utils"
 import { useContainerSize } from "../../../hooks/use-container-size"
-import { getSemanticSeriesColor } from "../../../lib/semantic-series-colors"
+import { resolveSeriesColor } from "../../../lib/semantic-series-colors"
 import type { BaseChartProps } from "../_shared/chart-types"
 import {
 	type LegendSeries,
@@ -137,7 +137,7 @@ export function QueryBuilderLineChart({
 		const base = seriesDefinitions.reduce((config, definition, index) => {
 			config[definition.chartKey] = {
 				label: definition.rawKey,
-				color: getSemanticSeriesColor(definition.rawKey) ?? `var(--chart-${(index % 5) + 1})`,
+				color: resolveSeriesColor(definition.rawKey, index),
 			}
 			return config
 		}, {} as ChartConfig)
