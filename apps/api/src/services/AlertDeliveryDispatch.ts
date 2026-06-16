@@ -402,6 +402,13 @@ const markdownToSlackMrkdwn = (markdown: string): string =>
 const truncate = (value: string, max: number): string =>
 	value.length > max ? `${value.slice(0, max - 1)}…` : value
 
+// Best-effort read of a provider's error response body for diagnostics. Only runs
+// on the failure path; the body is unread in every `!response.ok` branch today.
+const readErrorBody = (response: Response): Effect.Effect<string> =>
+	Effect.promise(() => response.text().catch(() => "")).pipe(
+		Effect.map((body) => truncate(body.trim().replace(/\s+/g, " "), 500)),
+	)
+
 /**
  * Resolve + render the effective title/body for a destination. Returns `null`
  * when the rule has no custom template (caller falls back to the hardcoded
@@ -532,8 +539,12 @@ export const dispatchDelivery = (
 							}),
 						)
 						if (!response.ok) {
+							const detail = yield* readErrorBody(response)
 							return yield* Effect.fail(
-								makeDeliveryError(`Slack delivery failed with ${response.status}`, "slack"),
+								makeDeliveryError(
+									`Slack delivery failed with ${response.status}${detail ? `: ${detail}` : ""}`,
+									"slack",
+								),
 							)
 						}
 						return {
@@ -587,9 +598,10 @@ export const dispatchDelivery = (
 								}),
 						)
 						if (!response.ok) {
+							const detail = yield* readErrorBody(response)
 							return yield* Effect.fail(
 								makeDeliveryError(
-									`PagerDuty delivery failed with ${response.status}`,
+									`PagerDuty delivery failed with ${response.status}${detail ? `: ${detail}` : ""}`,
 									"pagerduty",
 								),
 							)
@@ -616,9 +628,10 @@ export const dispatchDelivery = (
 							safeFetch(config.url, { method: "POST", headers, body: payloadJson, fetchFn }),
 						)
 						if (!response.ok) {
+							const detail = yield* readErrorBody(response)
 							return yield* Effect.fail(
 								makeDeliveryError(
-									`Webhook delivery failed with ${response.status}`,
+									`Webhook delivery failed with ${response.status}${detail ? `: ${detail}` : ""}`,
 									"webhook",
 								),
 							)
@@ -645,8 +658,12 @@ export const dispatchDelivery = (
 							safeFetch(config.webhookUrl, { method: "POST", headers, body: payloadJson, fetchFn }),
 						)
 						if (!response.ok) {
+							const detail = yield* readErrorBody(response)
 							return yield* Effect.fail(
-								makeDeliveryError(`Hazel delivery failed with ${response.status}`, "hazel"),
+								makeDeliveryError(
+									`Hazel delivery failed with ${response.status}${detail ? `: ${detail}` : ""}`,
+									"hazel",
+								),
 							)
 						}
 						return {
@@ -723,9 +740,10 @@ export const dispatchDelivery = (
 							)
 						}
 						if (!response.ok) {
+							const detail = yield* readErrorBody(response)
 							return yield* Effect.fail(
 								makeDeliveryError(
-									`Hazel delivery failed with ${response.status}`,
+									`Hazel delivery failed with ${response.status}${detail ? `: ${detail}` : ""}`,
 									"hazel-oauth",
 								),
 							)
@@ -763,8 +781,12 @@ export const dispatchDelivery = (
 							}),
 						)
 						if (!response.ok) {
+							const detail = yield* readErrorBody(response)
 							return yield* Effect.fail(
-								makeDeliveryError(`Discord delivery failed with ${response.status}`, "discord"),
+								makeDeliveryError(
+									`Discord delivery failed with ${response.status}${detail ? `: ${detail}` : ""}`,
+									"discord",
+								),
 							)
 						}
 						return {
