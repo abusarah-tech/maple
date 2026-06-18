@@ -50,21 +50,25 @@
     "tinybird": {
       "source": "tinybirdco/tinybird-agent-skills",
       "sourceType": "github",
-      "computedHash": "9a3ed9630867759e995fd881f488a97bb28c123a9c73a4312305171d0fc86b9a"
+      "skillPath": "skills/tinybird-best-practices/SKILL.md",
+      "computedHash": "43e71609ccad063aa4405b175da448524dc063c3b87bf3c45e355b2dde3d5426"
     },
     "tinybird-cli-guidelines": {
       "source": "tinybirdco/tinybird-agent-skills",
       "sourceType": "github",
-      "computedHash": "8d36a5e33cecfb092fd0fb194140a248d3901de10b5b7d03e4e60a9942f0a930"
+      "skillPath": "skills/tinybird-cli-guidelines/SKILL.md",
+      "computedHash": "fdd265aa6a502220b17f5d608b87c30beca0eadb9c88c368f3f3b2cebba2ad8a"
     },
     "tinybird-python-sdk-guidelines": {
       "source": "tinybirdco/tinybird-agent-skills",
       "sourceType": "github",
+      "skillPath": "skills/tinybird-python-sdk-guidelines/SKILL.md",
       "computedHash": "610ada91b068339d90ea544804fb395518767ae3588d47f29e21b2c6037de2c3"
     },
     "tinybird-typescript-sdk-guidelines": {
       "source": "tinybirdco/tinybird-agent-skills",
       "sourceType": "github",
+      "skillPath": "skills/tinybird-typescript-sdk-guidelines/SKILL.md",
       "computedHash": "b05e3924ea0f220fea4bb98bc0c3cdb7317384c4e8e40809dcf7e6c999bff351"
     }
   }
