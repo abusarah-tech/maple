@@ -11,6 +11,11 @@ import { buildInsertSql } from "./inserts"
 import { encodeLogs, encodeMetrics, encodeTraces, type EncodedBatch } from "./otlp/encode"
 import { decodeLogsRequest, decodeMetricsRequest, decodeTraceRequest } from "./otlp/proto"
 import schemaSql from "./schema/local-schema.sql" with { type: "text" }
+import { schemaFingerprint } from "./store-version"
+
+/** Fingerprint of the schema this build bootstraps stores with. Stamped into the
+ *  store marker so `maple start` can rebuild a store left on an older schema. */
+export const SCHEMA_FINGERPRINT = schemaFingerprint(schemaSql)
 
 /** Resolves a request path to a static asset (the bundled SPA). Returns
  *  `undefined` to fall through to the SPA shell (client-side routing). */

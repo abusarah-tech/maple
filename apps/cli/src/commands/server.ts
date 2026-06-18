@@ -5,8 +5,15 @@ import * as Flag from "effect/unstable/cli/Flag"
 import { openSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
-import { startServer } from "../server/serve"
-import { checkStoreCompatible, isStoreDirty, storeMarkerJson, storeMarkerPath, storeOpenMarkerPath } from "../server/store-version"
+import { SCHEMA_FINGERPRINT, startServer } from "../server/serve"
+import {
+	checkStoreCompatible,
+	isSchemaStale,
+	isStoreDirty,
+	storeMarkerJson,
+	storeMarkerPath,
+	storeOpenMarkerPath,
+} from "../server/store-version"
 import { resolveUiAssets } from "../server/ui-assets"
 import { amber, bold, cyan, dim, green, underline } from "../lib/style"
 import { MAPLE_VERSION } from "../version"
@@ -260,6 +267,27 @@ export const start = Command.make("start", {
 				yield* fs.makeDirectory(dataDir, { recursive: true })
 			}
 
+			// A store bootstrapped from an older bundled schema can't be evolved in
+			// place: `CREATE … IF NOT EXISTS` is a no-op on existing tables, so a
+			// column added to the schema (e.g. ServiceNamespace on trace_list_mv)
+			// never lands and facet queries referencing it fail. Rebuild from the
+			// current schema. Safe to auto-wipe — local telemetry is ephemeral and
+			// re-ingested — and only triggers once per schema change.
+			if (isSchemaStale(dataDir, SCHEMA_FINGERPRINT)) {
+				yield* Effect.sync(() =>
+					process.stderr.write(
+						amber(
+							"⚠ the local store was built from an older schema — " +
+								"rebuilding it from the current schema (local telemetry data is discarded)\n",
+						),
+					),
+				)
+				yield* fs.remove(dataDir, { recursive: true, force: true }).pipe(Effect.ignore)
+				yield* fs.remove(storeMarkerPath(dataDir), { force: true }).pipe(Effect.ignore)
+				yield* fs.remove(storeOpenMarkerPath(dataDir), { force: true }).pipe(Effect.ignore)
+				yield* fs.makeDirectory(dataDir, { recursive: true })
+			}
+
 			// Detached: spawn the same command without --background and exit.
 			if (a.background) return yield* startDetached(a.port, dataDir, a.offline)
 
@@ -294,7 +322,10 @@ export const start = Command.make("start", {
 					// Bootstrap succeeded — stamp the store so a later start over an
 					// incompatible binary upgrade is detected instead of crashing.
 					yield* fs
-						.writeFileString(storeMarkerPath(dataDir), storeMarkerJson(MAPLE_VERSION, new Date().toISOString()))
+						.writeFileString(
+							storeMarkerPath(dataDir),
+							storeMarkerJson(MAPLE_VERSION, new Date().toISOString(), SCHEMA_FINGERPRINT),
+						)
 						.pipe(Effect.ignore)
 
 					yield* Effect.acquireRelease(fs.writeFileString(pidPath, String(process.pid)), () =>
