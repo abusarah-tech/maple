@@ -7,7 +7,6 @@ import {
 	type SessionTraceSummary,
 } from "@/components/replays/replay-editor-timeline"
 import { SessionEventsPanel, type EventRow } from "@/components/replays/session-events-panel"
-import { ClockIcon, PulseIcon, EyeIcon, CircleWarningIcon } from "@/components/icons"
 import { formatDuration } from "@/components/replays/replay-format"
 import { CopyButton, Reveal, SessionIdentityHeader } from "@/components/replays/session-detail-parts"
 
@@ -118,44 +117,38 @@ export function ReplayStudio({
 	)
 }
 
-/** Compact summary metrics for the header — Duration / Clicks / Pages / Errors. */
+/** Unified vitals strip for the header — Duration / Clicks / Pages / Errors,
+ *  divided into one cohesive cluster. Only an error count > 0 takes colour. */
 function StatStrip({ session }: { session: ReplayStudioSession }) {
 	const items = [
-		{ icon: <ClockIcon className="size-3.5" />, label: "Duration", value: formatDuration(session.durationMs) },
-		{ icon: <PulseIcon className="size-3.5" />, label: "Clicks", value: String(session.clickCount) },
-		{ icon: <EyeIcon className="size-3.5" />, label: "Pages", value: String(session.pageViews || 1) },
-		{
-			icon: <CircleWarningIcon className="size-3.5" />,
-			label: "Errors",
-			value: String(session.errorCount),
-			error: session.errorCount > 0,
-		},
+		{ label: "Duration", value: formatDuration(session.durationMs) },
+		{ label: "Clicks", value: String(session.clickCount) },
+		{ label: "Pages", value: String(session.pageViews || 1) },
+		{ label: "Errors", value: String(session.errorCount), error: session.errorCount > 0 },
 	]
 	return (
-		<dl className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-2">
+		<dl className="flex shrink-0 items-stretch">
 			{items.map((it) => (
-				<div key={it.label} className="flex items-center gap-2">
-					<span
+				<div
+					key={it.label}
+					className="flex flex-col items-center border-l border-border/60 px-4 leading-tight first:border-l-0 first:pl-0 last:pr-0"
+				>
+					<dd
 						className={cn(
-							"grid size-7 shrink-0 place-items-center rounded-md",
-							it.error ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground",
+							"font-display text-xl font-semibold tabular-nums",
+							it.error ? "text-destructive" : "text-foreground",
 						)}
 					>
-						{it.icon}
-					</span>
-					<div className="leading-tight">
-						<dd
-							className={cn(
-								"font-display text-lg font-semibold tabular-nums",
-								it.error ? "text-destructive" : "text-foreground",
-							)}
-						>
-							{it.value}
-						</dd>
-						<dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-							{it.label}
-						</dt>
-					</div>
+						{it.value}
+					</dd>
+					<dt
+						className={cn(
+							"text-[10px] font-medium uppercase tracking-wider",
+							it.error ? "text-destructive/80" : "text-muted-foreground",
+						)}
+					>
+						{it.label}
+					</dt>
 				</div>
 			))}
 		</dl>
@@ -165,7 +158,7 @@ function StatStrip({ session }: { session: ReplayStudioSession }) {
 /** Compact one-line session details under the header (browser / device / country / service). */
 function SessionMetaLine({ session }: { session: ReplayStudioSession }) {
 	return (
-		<div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+		<div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border/60 pt-3 text-xs text-muted-foreground">
 			<MetaItem label="Browser">
 				<span className="text-foreground">{session.browserName || "—"}</span>
 				{session.osName ? ` · ${session.osName}` : ""}

@@ -3,7 +3,7 @@ import { motion, useReducedMotion } from "motion/react"
 import { useClipboard } from "@maple/ui/hooks/use-clipboard"
 import { Skeleton } from "@maple/ui/components/ui/skeleton"
 import { GlobeIcon, ClockIcon, CopyIcon, CheckIcon } from "@/components/icons"
-import { formatRelativeTime, gradientFor } from "./replay-format"
+import { formatRelativeTime, gradientFor, hostFromUrl } from "./replay-format"
 import { parseChTimestampMs } from "./replay-timeline"
 
 // Presentational building blocks for the session-replay detail page. Extracted
@@ -99,26 +99,31 @@ export function SessionIdentityHeader({
 					<h2 className="truncate font-display text-lg font-semibold leading-tight">{label}</h2>
 					<StatusPill active={isActive} />
 				</div>
-				<div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+				<div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
 					<a
 						href={urlInitial}
 						target="_blank"
 						rel="noreferrer"
-						className="inline-flex max-w-md items-center gap-1.5 truncate font-mono hover:text-foreground"
+						title={urlInitial}
+						className="inline-flex min-w-0 max-w-md items-center gap-1.5 font-mono hover:text-foreground"
 					>
 						<GlobeIcon className="size-3 shrink-0 opacity-70" />
-						<span className="truncate">{urlInitial}</span>
+						<span className="truncate">{hostFromUrl(urlInitial)}</span>
 					</a>
 					{startedValid && (
-						<span
-							className="inline-flex items-center gap-1.5"
-							title={new Date(startedEpoch).toLocaleString()}
-						>
-							<ClockIcon className="size-3 shrink-0 opacity-70" />
-							{formatRelativeTime(startedEpoch)}
-						</span>
+						<>
+							<span className="opacity-40">·</span>
+							<span
+								className="inline-flex shrink-0 items-center gap-1.5"
+								title={new Date(startedEpoch).toLocaleString()}
+							>
+								<ClockIcon className="size-3 shrink-0 opacity-70" />
+								{formatRelativeTime(startedEpoch)}
+							</span>
+						</>
 					)}
-					<span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px]">
+					<span className="opacity-40">·</span>
+					<span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px]">
 						{sessionId.slice(0, 12)}
 						<CopyButton value={sessionId} label="Copy session id" />
 					</span>
@@ -133,7 +138,7 @@ export function ReplayDetailSkeleton() {
 	// then a full-width trace timeline) so the page doesn't reflow on load.
 	return (
 		<div className="flex flex-col gap-4">
-			{/* Header: identity + stat strip + meta line */}
+			{/* Header: identity + vitals strip, then a divided meta line */}
 			<div className="flex flex-col gap-3">
 				<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 					<div className="flex items-center gap-3">
@@ -143,9 +148,11 @@ export function ReplayDetailSkeleton() {
 							<Skeleton className="h-3 w-64" />
 						</div>
 					</div>
-					<Skeleton className="h-9 w-72 shrink-0 rounded-lg" />
+					<Skeleton className="h-10 w-64 shrink-0 rounded-lg" />
 				</div>
-				<Skeleton className="h-4 w-96 max-w-full rounded" />
+				<div className="border-t border-border/60 pt-3">
+					<Skeleton className="h-4 w-96 max-w-full rounded" />
+				</div>
 			</div>
 
 			{/* Browser chrome + video | event stream */}
