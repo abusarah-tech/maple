@@ -42,7 +42,7 @@ export const TRACE_LIST_MV_RESOURCE_MAP: Record<string, string> = {
 // Attribute filter → typed Condition
 // ---------------------------------------------------------------------------
 
-import * as CH from "./ch/expr"
+import * as CH from "@maple-dev/clickhouse-builder/expr"
 
 export function buildAttrFilterCondition(
 	af: AttributeFilter,

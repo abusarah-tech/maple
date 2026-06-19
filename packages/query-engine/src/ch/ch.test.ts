@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest"
 import * as CH from "./index"
-import { compileCH, compileUnion } from "./compile"
+import { compileCH, compileUnion } from "@maple-dev/clickhouse-builder"
 import { tracesTimeseriesQuery, tracesBreakdownQuery, tracesListQuery } from "./queries/traces"
 import { logsFacetsQuery } from "./queries/logs"
 import { servicesFacetsQuery } from "./queries/services"
 import { sessionReplaysFacetsQuery } from "./queries/session-replays"
 import { metricsSummaryQuery } from "./queries/metrics"
 import { tracesDurationStatsQuery, spanHierarchyQuery, spanDetailQuery } from "./queries/errors"
-import { unionAll } from "./union"
+import { unionAll } from "@maple-dev/clickhouse-builder"
 
 // ---------------------------------------------------------------------------
 // Core DSL tests

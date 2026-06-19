@@ -6,9 +6,9 @@
 // ---------------------------------------------------------------------------
 
 import type { AttributeFilter, MetricType } from "../../query-engine"
-import * as CH from "../expr"
-import { param } from "../param"
-import type { ColumnAccessor } from "../query"
+import * as CH from "@maple-dev/clickhouse-builder/expr"
+import { param } from "@maple-dev/clickhouse-builder"
+import type { ColumnAccessor } from "@maple-dev/clickhouse-builder"
 import type { ServiceOverviewSpans, Traces, TracesAggregatesHourly } from "../tables"
 import { MetricsSum, MetricsGauge, MetricsHistogram, MetricsExpHistogram } from "../tables"
 import { buildAttrFilterCondition } from "../../traces-shared"

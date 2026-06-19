@@ -4,12 +4,12 @@
 // DSL-based query definitions for error aggregation and timeseries.
 // ---------------------------------------------------------------------------
 
-import * as CH from "../expr"
-import { param } from "../param"
-import { from, fromQuery, type CHQuery, type ColumnAccessor } from "../query"
-import type { ColumnDefs } from "../types"
-import { unionAll, type CHUnionQuery } from "../union"
-import { compileCH } from "../compile"
+import * as CH from "@maple-dev/clickhouse-builder/expr"
+import { param } from "@maple-dev/clickhouse-builder"
+import { from, fromQuery, type CHQuery, type ColumnAccessor } from "@maple-dev/clickhouse-builder"
+import type { ColumnDefs } from "@maple-dev/clickhouse-builder/types"
+import { unionAll, type CHUnionQuery } from "@maple-dev/clickhouse-builder"
+import { compileCH } from "@maple-dev/clickhouse-builder"
 import {
 	ErrorEvents,
 	ErrorEventsByTime,
