@@ -15,6 +15,15 @@ export interface ChatFlueEnv {
 	/** Deployment environment label, surfaced on telemetry. */
 	MAPLE_ENVIRONMENT?: string
 
+	// --- Telemetry (OpenTelemetry → Maple ingest) ---
+	/**
+	 * Maple ingest key (org-scoped; use the internal-org key, same as `apps/api`).
+	 * When unset, OTel export is disabled and the worker logs failures to stderr.
+	 */
+	MAPLE_INGEST_KEY?: string
+	/** OTLP traces endpoint base. Defaults to `https://ingest.maple.dev`. */
+	MAPLE_ENDPOINT?: string
+
 	// --- Auth (mirrors apps/chat-agent/src/lib/auth.ts) ---
 	/** `"clerk"` to verify Clerk session tokens, otherwise self-hosted HS256. */
 	MAPLE_AUTH_MODE?: string

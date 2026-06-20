@@ -90,6 +90,10 @@ export const createChatFlueWorker = async ({
 			FLUE_REGISTRY: registry,
 			MAPLE_API_URL: mapleApiUrl,
 			INTERNAL_SERVICE_TOKEN: alchemy.secret(requireEnv("INTERNAL_SERVICE_TOKEN")),
+			// OpenTelemetry → Maple ingest. Provide the internal-org ingest key so
+			// chat-flue spans land beside `maple-api`; telemetry no-ops when unset.
+			...optionalSecret("MAPLE_INGEST_KEY"),
+			...optionalPlain("MAPLE_ENDPOINT"),
 			...optionalPlain("MAPLE_ENVIRONMENT", resolveDeploymentEnvironment(stage)),
 			...optionalPlain("MAPLE_CHAT_MODEL"),
 			...optionalPlain("MAPLE_TRIAGE_MODEL"),

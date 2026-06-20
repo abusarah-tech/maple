@@ -68,7 +68,23 @@ export function useFlueChat({ tabId, context }: UseFlueChatOptions): UseFlueChat
 		[agent.messages, userLog],
 	)
 
-	const isLoading = agent.status === "submitted" || agent.status === "streaming"
+	// On a fresh (dormant) conversation, the first send schedules a stream reconnect,
+	// so Flue flips to `connecting` while the backend cold-starts — which the SDK does
+	// not count as activity. Track that we're awaiting a reply so the "Thinking…"
+	// indicator (and the disabled composer) survive that gap. Cleared when the turn
+	// settles; kept through mid-stream reconnect blips by not clearing on `streaming`.
+	const [pendingResponse, setPendingResponse] = useState(false)
+	useEffect(() => {
+		setPendingResponse(false)
+	}, [conversationId])
+	useEffect(() => {
+		if (agent.status === "idle" || agent.status === "error") setPendingResponse(false)
+	}, [agent.status])
+
+	const isLoading =
+		agent.status === "submitted" ||
+		agent.status === "streaming" ||
+		(pendingResponse && agent.status === "connecting")
 
 	const sendMessage = useCallback(
 		(text: string) => {
@@ -80,6 +96,7 @@ export function useFlueChat({ tabId, context }: UseFlueChatOptions): UseFlueChat
 			const outgoing = block ? wrapContextPreamble(block, trimmed) : trimmed
 			// Anchor this message before the assistant turn(s) it will trigger.
 			const turnsBefore = agent.messages.filter((message) => message.role === "assistant").length
+			setPendingResponse(true)
 			setUserLog((prev) => {
 				const next: UserLogEntry[] = [
 					...prev,

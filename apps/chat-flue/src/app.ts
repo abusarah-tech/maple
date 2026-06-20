@@ -1,31 +1,67 @@
+import { createOpenTelemetryObserver } from "@flue/opentelemetry"
 import { observe } from "@flue/runtime"
 import { flue } from "@flue/runtime/routing"
+import { env } from "cloudflare:workers"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { instanceIdFromAgentPath, verifyRequest } from "./lib/auth.ts"
 import type { ChatFlueEnv } from "./lib/env.ts"
 import { orgIdFromInstanceId } from "./lib/org.ts"
+import { CHAT_FLUE_SERVICE_NAME, rootContextFromRequest, setupTelemetry } from "./lib/telemetry.ts"
 
 // ---------------------------------------------------------------------------
 // Telemetry bridge
 // ---------------------------------------------------------------------------
-// `observe` is isolate-local. Phase 1d ships structured logging of agent/tool/run
-// failures; a full OpenTelemetry/OTLP exporter into Maple's own pipeline
-// (`maple.*` attributes, Title-Case status — see CLAUDE.md self-observability and
-// the maple-telemetry-conventions skill) is a follow-up: workerd OTLP export is
-// non-trivial and not needed for parity with the legacy agent, which emitted no
-// OTel of its own.
-observe((event) => {
-	if (event.type === "log" && event.level === "error") {
-		console.error("[chat-flue]", event.message, event.attributes ?? {})
-		return
-	}
-	if ("isError" in event && event.isError) {
-		const label = "toolName" in event ? `tool ${event.toolName}` : event.type
-		const detail = "error" in event ? event.error : undefined
-		console.error(`[chat-flue] ${label} failed`, detail ?? "")
-	}
+// `observe` is isolate-local, and this module's top-level body runs in every
+// isolate the Flue-generated entry loads — the worker AND the chat-agent /
+// triage Durable Objects — so the OTel observer is registered wherever the
+// model/tool/run events actually fire. When MAPLE_INGEST_KEY is set we ship Flue
+// events as OpenTelemetry spans to Maple's ingest (the Flue OTel adapter →
+// `maple-chat-flue` service, GenAI `chat` spans, `flue.tool`/`flue.operation`,
+// etc.); otherwise we fall back to the original structured error logging so
+// local dev still surfaces failures with zero export noise.
+const cfEnv = env as unknown as ChatFlueEnv
+const tracerProvider = setupTelemetry({
+	ingestKey: cfEnv.MAPLE_INGEST_KEY,
+	endpoint: cfEnv.MAPLE_ENDPOINT,
+	environment: cfEnv.MAPLE_ENVIRONMENT,
 })
+
+if (tracerProvider) {
+	// Flue events → OpenTelemetry spans. Content (prompts, model I/O, tool
+	// args/results, detailed errors) is omitted by default — intentional for an
+	// AI chat; a redacted `exportContent` hook is a future opt-in.
+	observe(
+		createOpenTelemetryObserver({
+			tracer: tracerProvider.getTracer(CHAT_FLUE_SERVICE_NAME),
+			// Nest chat spans under the caller's (web/mobile) distributed trace
+			// when it propagates `traceparent`; standalone otherwise.
+			resolveRootContext: (_event, ctx) => rootContextFromRequest(ctx.req),
+		}),
+	)
+
+	// workerd flush. `BatchSpanProcessor`'s timer is unreliable across isolate
+	// suspension, and Durable-Object isolates have no `ctx.waitUntil`, so force a
+	// flush at Flue's own terminal boundaries. (Worker-isolate HTTP spans are
+	// drained from the Hono response middleware below.)
+	observe((event) => {
+		if (event.type === "run_end" || event.type === "idle" || event.type === "agent_end") {
+			void tracerProvider.forceFlush()
+		}
+	})
+} else {
+	observe((event) => {
+		if (event.type === "log" && event.level === "error") {
+			console.error("[chat-flue]", event.message, event.attributes ?? {})
+			return
+		}
+		if ("isError" in event && event.isError) {
+			const label = "toolName" in event ? `tool ${event.toolName}` : event.type
+			const detail = "error" in event ? event.error : undefined
+			console.error(`[chat-flue] ${label} failed`, detail ?? "")
+		}
+	})
+}
 
 // ---------------------------------------------------------------------------
 // HTTP application
@@ -70,6 +106,20 @@ app.use(
 		maxAge: 86400,
 	}),
 )
+
+// Drain worker-isolate spans before the isolate parks. `executionCtx` is absent
+// under unit tests (`app.fetch(req, env)` with no third arg) — guard it; those
+// spans flush at Flue's run/idle boundaries instead.
+if (tracerProvider) {
+	app.use("*", async (c, next) => {
+		await next()
+		try {
+			c.executionCtx.waitUntil(tracerProvider.forceFlush())
+		} catch {
+			// No ExecutionContext available (tests) — nothing to schedule.
+		}
+	})
+}
 
 app.get("/health", (c) => c.json({ ok: true }))
 
