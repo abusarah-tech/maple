@@ -2235,6 +2235,30 @@ export const pricing_full_api = () => `전체 API 액세스`
  * @returns {string}
  */
 /* @__NO_SIDE_EFFECTS__ */
+export const pricing_mcp_server = () => `MCP 서버`
+
+
+/**
+ * 
+ * @returns {string}
+ */
+/* @__NO_SIDE_EFFECTS__ */
+export const pricing_ai_chat = () => `AI 채팅`
+
+
+/**
+ * 
+ * @returns {string}
+ */
+/* @__NO_SIDE_EFFECTS__ */
+export const pricing_ai_triage = () => `AI 오류 분류`
+
+
+/**
+ * 
+ * @returns {string}
+ */
+/* @__NO_SIDE_EFFECTS__ */
 export const pricing_email_support = () => `이메일 지원`
 
 
@@ -4324,27 +4348,3 @@ export const language_ja = () => `日本語`
  */
 /* @__NO_SIDE_EFFECTS__ */
 export const language_ko = () => `한국어`
-
-
-/**
- * 
- * @returns {string}
- */
-/* @__NO_SIDE_EFFECTS__ */
-export const pricing_mcp_server = () => `MCP 서버`
-
-
-/**
- * 
- * @returns {string}
- */
-/* @__NO_SIDE_EFFECTS__ */
-export const pricing_ai_chat = () => `AI 채팅`
-
-
-/**
- * 
- * @returns {string}
- */
-/* @__NO_SIDE_EFFECTS__ */
-export const pricing_ai_triage = () => `AI 오류 분류`

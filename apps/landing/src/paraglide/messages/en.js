@@ -2439,6 +2439,30 @@ export const pricing_full_api = () => `Full API access`
  * @returns {string}
  */
 /* @__NO_SIDE_EFFECTS__ */
+export const pricing_mcp_server = () => `MCP server`
+
+
+/**
+ * 
+ * @returns {string}
+ */
+/* @__NO_SIDE_EFFECTS__ */
+export const pricing_ai_chat = () => `AI chat`
+
+
+/**
+ * 
+ * @returns {string}
+ */
+/* @__NO_SIDE_EFFECTS__ */
+export const pricing_ai_triage = () => `AI error triaging`
+
+
+/**
+ * 
+ * @returns {string}
+ */
+/* @__NO_SIDE_EFFECTS__ */
 export const pricing_email_support = () => `Email support`
 
 
@@ -4528,27 +4552,3 @@ export const language_ja = () => `日本語`
  */
 /* @__NO_SIDE_EFFECTS__ */
 export const language_ko = () => `한국어`
-
-
-/**
- * 
- * @returns {string}
- */
-/* @__NO_SIDE_EFFECTS__ */
-export const pricing_mcp_server = () => `MCP server`
-
-
-/**
- * 
- * @returns {string}
- */
-/* @__NO_SIDE_EFFECTS__ */
-export const pricing_ai_chat = () => `AI chat`
-
-
-/**
- * 
- * @returns {string}
- */
-/* @__NO_SIDE_EFFECTS__ */
-export const pricing_ai_triage = () => `AI error triaging`
